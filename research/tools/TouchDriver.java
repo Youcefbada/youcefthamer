@@ -69,6 +69,39 @@ public class TouchDriver {
                 syn(fos, buf);
 
                 System.out.println("TAP_SUCCESS (" + x + "," + y + ")");
+            } else if ("hold".equalsIgnoreCase(action)) {
+                int x = Integer.parseInt(args[1]);
+                int y = Integer.parseInt(args[2]);
+                int holdDurationMs = Integer.parseInt(args[3]);
+
+                // Initial Down
+                writeEvent(fos, buf, EV_ABS, ABS_MT_SLOT, 0);
+                writeEvent(fos, buf, EV_ABS, ABS_MT_TRACKING_ID, trackId);
+                writeEvent(fos, buf, EV_KEY, BTN_TOUCH, 1);
+                writeEvent(fos, buf, EV_ABS, ABS_MT_POSITION_X, x);
+                writeEvent(fos, buf, EV_ABS, ABS_MT_POSITION_Y, y);
+                writeEvent(fos, buf, EV_ABS, ABS_MT_TOUCH_MAJOR, 60);
+                writeEvent(fos, buf, EV_ABS, ABS_MT_TOUCH_MINOR, 45);
+                syn(fos, buf);
+
+                // Natural physiological tremor during hold
+                int intervals = holdDurationMs / 50;
+                for (int k = 0; k < intervals; k++) {
+                    Thread.sleep(50);
+                    int tremX = x + (int) Math.round(rng.nextGaussian() * 0.8);
+                    int tremY = y + (int) Math.round(rng.nextGaussian() * 0.8);
+                    int major = (int) Math.round(60 + rng.nextGaussian() * 2.0);
+                    writeEvent(fos, buf, EV_ABS, ABS_MT_POSITION_X, tremX);
+                    writeEvent(fos, buf, EV_ABS, ABS_MT_POSITION_Y, tremY);
+                    writeEvent(fos, buf, EV_ABS, ABS_MT_TOUCH_MAJOR, major);
+                    syn(fos, buf);
+                }
+
+                // Up
+                writeEvent(fos, buf, EV_ABS, ABS_MT_TRACKING_ID, -1);
+                writeEvent(fos, buf, EV_KEY, BTN_TOUCH, 0);
+                syn(fos, buf);
+                System.out.println("HOLD_SUCCESS (" + x + "," + y + ") " + holdDurationMs + "ms");
             } else if ("swipe".equalsIgnoreCase(action)) {
                 double x1 = Double.parseDouble(args[1]);
                 double y1 = Double.parseDouble(args[2]);
