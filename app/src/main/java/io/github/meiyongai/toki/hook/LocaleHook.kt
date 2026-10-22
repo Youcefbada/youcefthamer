@@ -37,15 +37,15 @@ object LocaleHook {
 
     /** 功能开关状态缓存 */
     @Volatile
-    private var isEnabled: Boolean = false
+    private var isEnabled: Boolean = true
 
-    /** 当前运行时的伪装语言标签（如 "ja-JP"、"en-US"） */
+    /** 当前运行时的伪装语言标签，默认沙特阿拉伯 */
     @Volatile
-    private var activeLanguageTag: String = "ja-JP"
+    private var activeLanguageTag: String = "ar-SA"
 
     /** 当前运行时的 Java 标准 Locale 实例 */
     @Volatile
-    private var activeLocale: Locale = Locale.forLanguageTag("ja-JP")
+    private var activeLocale: Locale = Locale.forLanguageTag("ar-SA")
 
     /**
      * 在安装任何拦截器之前捕获的真实系统 [LocaleList]。
@@ -243,11 +243,7 @@ object LocaleHook {
      *     - `io.github.meiyongai.toki.hook.TokiModule.onPackageLoaded`: 目标包加载时触发。
      */
     fun init(module: XposedModule) {
-        realSystemLocaleList = LocaleList.getDefault()
-        Log.i(TAG, "已捕获真实系统 LocaleList: $realSystemLocaleList")
-
         hookLocaleMethods(module)
-        hookLocaleListMethods(module)
-        Log.i(TAG, "系统语言伪装子系统就绪（业务层伪装 + 排版管线保护）")
+        Log.i(TAG, "系统语言伪装子系统就绪（业务层 Locale 伪装）")
     }
 }

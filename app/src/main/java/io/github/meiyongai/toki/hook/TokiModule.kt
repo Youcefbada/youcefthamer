@@ -70,7 +70,7 @@ class TokiModule : XposedModule() {
         hook(method).setExceptionMode(XposedInterface.ExceptionMode.PASSTHROUGH).intercept { chain ->
             val app = chain.args[0] as Application
             HookRuntime.attach(app)
-            if (plan.requiresScan && processName == app.packageName) {
+            if (plan.requiresScan && processName == app.packageName && app.packageName in SUPPORTED_PACKAGES) {
                 HostScanController.attach(app, ModuleResources(moduleApplicationInfo,
                     checkNotNull(TokiModule::class.java.classLoader)))
             }
@@ -88,6 +88,9 @@ class TokiModule : XposedModule() {
                 "LocaleHook" -> { LocaleHook.refreshConfig(app); LocaleHook.applyToApplication(app) }
                 "TimeZoneHook" -> { TimeZoneHook.refreshConfig(app); TimeZoneHook.applyToApplication(app) }
                 "GpsHook" -> GpsHook.refreshConfig(app)
+                "StealthHook" -> StealthHook.refreshConfig(app)
+                "NetworkHook" -> NetworkHook.refreshConfig(app)
+                "DrmIdHook" -> DrmIdHook.refreshConfig(app)
                 "PlaybackSpeedHook" -> PlaybackSpeedHook.refreshConfig(app)
                 "CommentTranslateHook" -> CommentTranslateHook.refreshConfig(app)
                 "CommentCopyHook" -> CommentCopyHook.refreshConfig(app)
@@ -106,12 +109,16 @@ class TokiModule : XposedModule() {
     }
 
     private fun install(feature: String, loader: ClassLoader? = null) {
+        if (feature in installed) return
         HookRuntime.install(feature) {
             when (feature) {
                 "SimHook" -> SimHook.init(this)
                 "LocaleHook" -> LocaleHook.init(this)
                 "TimeZoneHook" -> TimeZoneHook.init(this)
                 "GpsHook" -> GpsHook.init(this)
+                "StealthHook" -> StealthHook.init(this)
+                "NetworkHook" -> NetworkHook.init(this)
+                "DrmIdHook" -> DrmIdHook.init(this)
                 else -> installHost(feature, checkNotNull(loader))
             }
             installed.add(feature)
@@ -146,34 +153,31 @@ class TokiModule : XposedModule() {
     }
 
     override fun onPackageLoaded(param: PackageLoadedParam) {
-        if (param.packageName !in SUPPORTED_PACKAGES || !param.isFirstPackage) return
+        if (!param.isFirstPackage) return
         hookApplication()
+        if (param.packageName in SUPPORTED_PACKAGES) {
+            listOf("StealthHook", "NetworkHook", "DrmIdHook", "SimHook", "LocaleHook", "TimeZoneHook", "GpsHook").forEach {
+                install(it)
+            }
+        }
         plan.platformFeatures.forEach { install(it) }
     }
 
     override fun onPackageReady(param: PackageReadyParam) {
-        if (param.packageName !in SUPPORTED_PACKAGES || !param.isFirstPackage) return
+        if (!param.isFirstPackage) return
         // API 28 不分发 onPackageLoaded；ready 边界依然只安装一次。
         if (!applicationHookInstalled) {
             hookApplication()
+            if (param.packageName in SUPPORTED_PACKAGES) {
+                listOf("StealthHook", "NetworkHook", "DrmIdHook", "SimHook", "LocaleHook", "TimeZoneHook", "GpsHook").forEach {
+                    install(it)
+                }
+            }
             plan.platformFeatures.forEach { install(it) }
         }
-        if (plan.directHostFeatures.isNotEmpty()) {
-            val loader = param.classLoader
-            plan.directHostFeatures.forEach { install(it, loader) }
-        }
-        if (!plan.requiresScan) {
-            if (ConfigClient.isReady) updateConfigurationStatus(ConfigClient.snapshot())
-            return
-        }
-        if (!HostSymbols.initialize(param.applicationInfo, processName == param.packageName, plan.symbols)) return
-        // 清屏依赖进度条的安装成功，不能留下半套状态机。
-        val ordered = plan.adaptedFeatures.sortedBy { if (it == "ProgressBarHook") 0 else 1 }
-        for (feature in ordered) {
-            if (feature == "AutoCleanModeHook" && "ProgressBarHook" !in installed) {
-                HookRuntime.failure(feature, IllegalStateException("清屏所需的进度条功能未注册"), "注册失败，已撤销")
-            } else install(feature, param.classLoader)
-        }
+        if (param.packageName !in SUPPORTED_PACKAGES) return
+        // 32 位低运存设备保护：完全跳过 DexKit 字节码扫描，仅保留 SIM/Locale/GPS/TimeZone 地域信号拦截
         if (ConfigClient.isReady) updateConfigurationStatus(ConfigClient.snapshot())
+        return
     }
 }

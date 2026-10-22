@@ -9,41 +9,34 @@ import io.github.meiyongai.toki.model.RegionPresets
 import io.github.meiyongai.toki.provider.ConfigClient
 import io.github.libxposed.api.XposedModule
 import java.lang.reflect.Modifier
+import java.util.concurrent.ThreadLocalRandom
 
 /**
- * 系统 GPS 与地理位置（Location）伪装 Hook 核心处理器。
+ * 系统 GPS 与地理位置（Location）微抖动拟真 Hook 核心处理器（TokiGpsHook v2.0 Enterprise）。
  *
- * 拦截目标应用进程内对 [Location] 以及 [LocationManager] 的定位获取逻辑，
- * 将经纬度坐标重定向至用户设定的目标位置，重置 [Location.isFromMockProvider] 规避风控检测，
- * 支持跟随目标地区自动计算代表经纬度，亦支持用户全自由度自定义指定。
+ * 拦截目标应用对 [Location] 以及 [LocationManager] 的定位获取逻辑，
+ * 将经纬度坐标重定向至沙特利雅得基准坐标 (24.7136, 46.6753)，
+ * 注入高斯微漂移（±0.00005°）、拟真利雅得海拔（612m ± 1.5m）、动态精度与微速，
+ * 彻底清除 [Location.isFromMockProvider] 虚拟定位标记，消除死板静态坐标的机刷/风控异常。
  */
 object GpsHook {
 
     private const val TAG = "TokiGpsHook"
 
-    /** 功能开关状态 */
     @Volatile
-    private var isEnabled: Boolean = false
+    private var isEnabled: Boolean = true
 
-    /** 当前运行时的生效纬度 */
+    /** 沙特利雅得基准纬度 */
     @Volatile
-    private var activeLatitude: Double = 35.6762
+    private var activeLatitude: Double = 24.7136
 
-    /** 当前运行时的生效经度 */
+    /** 沙特利雅得基准经度 */
     @Volatile
-    private var activeLongitude: Double = 139.6503
+    private var activeLongitude: Double = 46.6753
 
-    /**
-     * 从跨进程配置服务同步最新设定的定位伪装配置。
-     *
-     * 自动研判是否开启“跟随地区设置”，若开启则根据目标地区 ISO 代号反查推荐经纬度；
-     * 否则读取用户自定义指定的坐标值。
-     *
-     * @param context 宿主目标应用的上下文对象。
-     *
-     * Callers:
-     * - `io.github.meiyongai.toki.hook.TokiModule.hookApplication`: 宿主启动时触发配置加载。
-     */
+    /** 利雅得平均海拔 (米) */
+    private const val BASE_ALTITUDE = 612.0
+
     fun refreshConfig(context: Context) {
         isEnabled = ConfigClient.getBoolean(context, "gps_spoof_enabled")
         if (!isEnabled) {
@@ -53,117 +46,128 @@ object GpsHook {
 
         val followRegion = ConfigClient.getBoolean(context, "gps_follow_region")
         if (followRegion) {
-            val targetRegion = ConfigClient.getString(context, "target_region", defaultValue = "JP") ?: "JP"
+            val targetRegion = ConfigClient.getString(context, "target_region", defaultValue = "SA") ?: "SA"
             activeLatitude = RegionPresets.resolveLatitudeForIso(targetRegion)
             activeLongitude = RegionPresets.resolveLongitudeForIso(targetRegion)
         } else {
-            val customLatStr = ConfigClient.getString(context, "custom_latitude", defaultValue = "35.6762") ?: "35.6762"
-            val customLngStr = ConfigClient.getString(context, "custom_longitude", defaultValue = "139.6503") ?: "139.6503"
-            activeLatitude = customLatStr.toDoubleOrNull() ?: 35.6762
-            activeLongitude = customLngStr.toDoubleOrNull() ?: 139.6503
+            val customLatStr = ConfigClient.getString(context, "custom_latitude", defaultValue = "24.7136") ?: "24.7136"
+            val customLngStr = ConfigClient.getString(context, "custom_longitude", defaultValue = "46.6753") ?: "46.6753"
+            activeLatitude = customLatStr.toDoubleOrNull() ?: 24.7136
+            activeLongitude = customLngStr.toDoubleOrNull() ?: 46.6753
         }
 
         Log.i(TAG, "已同步伪装 GPS 坐标 -> ($activeLatitude, $activeLongitude) (followRegion=$followRegion)")
     }
 
-    /**
-     * 获取当前定位伪装是否处于激活状态。
-     *
-     * @return 激活返回 true，停用返回 false。
-     *
-     * Callers:
-     * - `io.github.meiyongai.toki.hook.GpsHook.hookLocationMethods`: 方法拦截分发时校验。
-     */
     fun isFeatureEnabled(): Boolean = isEnabled
 
     /**
-     * 构建包含当前伪装坐标与合理精度的合法 [Location] 实例。
-     *
-     * @param provider 定位提供者名称（如 "gps" 或 "network"）。
-     * @return 注入伪装数据的 [Location] 实例。
-     *
-     * Callers:
-     * - `io.github.meiyongai.toki.hook.GpsHook.hookLocationManagerMethods`: 兜底返回合法定位数据。
+     * 计算带有人体/环境微抖动的当前纬度（高斯分布 ±0.00005 度）。
+     */
+    fun getJitteredLatitude(): Double {
+        val jitter = ThreadLocalRandom.current().nextGaussian() * 0.00005
+        return activeLatitude + jitter
+    }
+
+    /**
+     * 计算带有人体/环境微抖动的当前经度（高斯分布 ±0.00005 度）。
+     */
+    fun getJitteredLongitude(): Double {
+        val jitter = ThreadLocalRandom.current().nextGaussian() * 0.00005
+        return activeLongitude + jitter
+    }
+
+    /**
+     * 拟真利雅得海拔（612.0m ± 1.5m 微漂移）。
+     */
+    fun getJitteredAltitude(): Double {
+        val jitter = ThreadLocalRandom.current().nextGaussian() * 1.5
+        return BASE_ALTITUDE + jitter
+    }
+
+    /**
+     * 拟真 GPS 精度（6.8f - 12.4f 米波动）。
+     */
+    fun getJitteredAccuracy(): Float {
+        return 7.2f + (ThreadLocalRandom.current().nextFloat() * 4.2f)
+    }
+
+    /**
+     * 拟真静止/手持微动速度（0.0f - 0.25f m/s）。
+     */
+    fun getJitteredSpeed(): Float {
+        return ThreadLocalRandom.current().nextFloat() * 0.25f
+    }
+
+    /**
+     * 构建包含沙特利雅得高斯微抖动坐标与合理海拔/精度的合法 [Location] 实例。
      */
     fun createSpoofedLocation(provider: String = LocationManager.GPS_PROVIDER): Location {
         return Location(provider).apply {
-            latitude = activeLatitude
-            longitude = activeLongitude
-            altitude = 35.0
-            accuracy = 5.0f
+            latitude = getJitteredLatitude()
+            longitude = getJitteredLongitude()
+            altitude = getJitteredAltitude()
+            accuracy = getJitteredAccuracy()
+            bearing = ThreadLocalRandom.current().nextFloat() * 360.0f
+            speed = getJitteredSpeed()
             time = System.currentTimeMillis()
             elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
         }
     }
 
-    /**
-     * 注册 Location 实体类属性获取相关的 Hook 拦截器。
-     *
-     * @param module 当前注入的 [XposedModule] 实例。
-     *
-     * Callers:
-     * - `io.github.meiyongai.toki.hook.GpsHook.init`: 模块初始化流程。
-     */
     private fun hookLocationMethods(module: XposedModule) {
         val locationClass = Location::class.java
 
-        // 1. Hook getLatitude()
         val getLatMethod = locationClass.getMethod("getLatitude")
         module.trackHook("GpsHook", getLatMethod).intercept { chain ->
-            if (isFeatureEnabled()) {
-                activeLatitude
-            } else {
-                chain.proceed()
-            }
+            if (isFeatureEnabled()) getJitteredLatitude() else chain.proceed()
         }
 
-        // 2. Hook getLongitude()
         val getLngMethod = locationClass.getMethod("getLongitude")
         module.trackHook("GpsHook", getLngMethod).intercept { chain ->
-            if (isFeatureEnabled()) {
-                activeLongitude
-            } else {
-                chain.proceed()
-            }
+            if (isFeatureEnabled()) getJitteredLongitude() else chain.proceed()
         }
 
-        // 3. Hook isFromMockProvider()，防止 TikTok 检测虚拟定位
+        val getAltMethod = locationClass.getMethod("getAltitude")
+        module.trackHook("GpsHook", getAltMethod).intercept { chain ->
+            if (isFeatureEnabled()) getJitteredAltitude() else chain.proceed()
+        }
+
+        val getAccMethod = locationClass.getMethod("getAccuracy")
+        module.trackHook("GpsHook", getAccMethod).intercept { chain ->
+            if (isFeatureEnabled()) getJitteredAccuracy() else chain.proceed()
+        }
+
+        val getSpeedMethod = locationClass.getMethod("getSpeed")
+        module.trackHook("GpsHook", getSpeedMethod).intercept { chain ->
+            if (isFeatureEnabled()) getJitteredSpeed() else chain.proceed()
+        }
+
         for (method in locationClass.declaredMethods) {
             if (method.name == "isFromMockProvider" && method.parameterCount == 0) {
                 module.trackHook("GpsHook", method).intercept { chain ->
-                    if (isFeatureEnabled()) {
-                        false
-                    } else {
-                        chain.proceed()
-                    }
+                    if (isFeatureEnabled()) false else chain.proceed()
                 }
             }
         }
 
-        Log.i(TAG, "Location 经纬度与 Mock 防检测拦截器挂载完成")
+        Log.i(TAG, "Location 经纬度/海拔/精度微抖动与 Mock 防检测拦截器挂载完成")
     }
 
-    /**
-     * 注册 LocationManager 系统服务相关的 Hook 拦截器。
-     *
-     * @param module 当前注入的 [XposedModule] 实例。
-     *
-     * Callers:
-     * - `io.github.meiyongai.toki.hook.GpsHook.init`: 模块初始化流程。
-     */
     private fun hookLocationManagerMethods(module: XposedModule) {
         val lmClass = LocationManager::class.java
         for (method in lmClass.declaredMethods) {
-            if (Modifier.isAbstract(method.modifiers)) {
-                continue
-            }
+            if (Modifier.isAbstract(method.modifiers)) continue
             if (method.name == "getLastKnownLocation" && method.parameterCount == 1) {
                 module.trackHook("GpsHook", method).intercept { chain ->
                     if (isFeatureEnabled()) {
                         val realResult = chain.proceed() as? Location
                         if (realResult != null) {
-                            realResult.latitude = activeLatitude
-                            realResult.longitude = activeLongitude
+                            realResult.latitude = getJitteredLatitude()
+                            realResult.longitude = getJitteredLongitude()
+                            realResult.altitude = getJitteredAltitude()
+                            realResult.accuracy = getJitteredAccuracy()
+                            realResult.speed = getJitteredSpeed()
                             realResult
                         } else {
                             val provider = chain.args[0] as? String ?: LocationManager.GPS_PROVIDER
@@ -178,17 +182,9 @@ object GpsHook {
         Log.i(TAG, "LocationManager 定位服务拦截器挂载完成")
     }
 
-    /**
-     * 模块初始化入口，安装系统 GPS 伪装拦截机制。
-     *
-     * @param module 当前注入的 [XposedModule] 实例。
-     *
-     * Callers:
-     * - `io.github.meiyongai.toki.hook.TokiModule.onPackageLoaded`: 目标包加载时触发。
-     */
     fun init(module: XposedModule) {
         hookLocationMethods(module)
         hookLocationManagerMethods(module)
-        Log.i(TAG, "系统 GPS 伪装子系统就绪")
+        Log.i(TAG, "系统 GPS 微抖动与海拔拟真子系统就绪")
     }
 }

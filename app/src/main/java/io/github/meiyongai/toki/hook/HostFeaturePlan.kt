@@ -64,7 +64,10 @@ internal class HostFeaturePlan(private val startup: ConfigSnapshot?) {
         else requested.revision
 
     companion object {
-        val platform = setOf("SimHook", "LocaleHook", "TimeZoneHook", "GpsHook")
+        val platform = setOf(
+            "SimHook", "LocaleHook", "TimeZoneHook", "GpsHook",
+            "StealthHook", "NetworkHook", "DrmIdHook"
+        )
         val directHost = setOf("StatusBarHook", "VideoDurationAlertHook")
 
         fun enabled(feature: String, snapshot: ConfigSnapshot): Boolean = when (feature) {
@@ -81,6 +84,9 @@ internal class HostFeaturePlan(private val startup: ConfigSnapshot?) {
             "LocaleHook" to setOf("language_spoof_enabled", "language_follow_region", "target_region", "custom_language"),
             "TimeZoneHook" to setOf("timezone_spoof_enabled", "timezone_follow_region", "target_region", "custom_timezone"),
             "GpsHook" to setOf("gps_spoof_enabled", "gps_follow_region", "target_region", "custom_latitude", "custom_longitude"),
+            "StealthHook" to setOf("stealth_spoof_enabled"),
+            "NetworkHook" to setOf("network_spoof_enabled"),
+            "DrmIdHook" to setOf("drm_spoof_enabled", "custom_android_id"),
             "PlaybackSpeedHook" to setOf("fixed_speed_enabled", "speed_expand_enabled", "fixed_speed_value", "speed_expand_list"),
             // 当前沉浸修改没有成对恢复全部宿主布局/背景，明确按会话应用。
             "ImmersiveFullScreenHook" to setOf("immersive_full_screen", "video_fit_mode"),

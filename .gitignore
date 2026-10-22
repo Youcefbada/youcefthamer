@@ -33,3 +33,10 @@ signing.properties
 *.apks
 *.xapk
 *.aab
+/research/firmware/
+/research/tools/
+/research/upstream/
+*.part
+*.enc4
+*.png
+

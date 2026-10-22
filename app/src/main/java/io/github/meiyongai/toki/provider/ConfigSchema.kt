@@ -9,6 +9,9 @@ object ConfigSchema {
         "LocaleHook" to listOf("language_spoof_enabled"),
         "TimeZoneHook" to listOf("timezone_spoof_enabled"),
         "GpsHook" to listOf("gps_spoof_enabled"),
+        "StealthHook" to listOf("stealth_spoof_enabled"),
+        "NetworkHook" to listOf("network_spoof_enabled"),
+        "DrmIdHook" to listOf("drm_spoof_enabled"),
         "PlaybackSpeedHook" to listOf("fixed_speed_enabled", "speed_expand_enabled"),
         "SpeedOptions" to listOf("speed_expand_enabled"),
         "CommentTranslateHook" to listOf("comment_translate_enabled"),
@@ -32,10 +35,13 @@ object ConfigSchema {
             "feed_remove_topic_recommendations", "feed_remove_creator_recommendations")
     )
     val booleanDefaults: Map<String, Boolean> = featureSwitches.values.flatten().associateWith { false } +
-        listOf("language_follow_region", "timezone_follow_region", "gps_follow_region").associateWith { true }
+        listOf(
+            "language_follow_region", "timezone_follow_region", "gps_follow_region",
+            "stealth_spoof_enabled", "network_spoof_enabled", "drm_spoof_enabled"
+        ).associateWith { true }
     private val rangePrefixes = listOf("feed_filter_views", "feed_filter_likes", "feed_filter_duration")
     private val stringKeys = setOf("target_region", "sim_operator_code", "sim_operator_name",
-        "custom_language", "custom_timezone", "custom_latitude", "custom_longitude",
+        "custom_language", "custom_timezone", "custom_latitude", "custom_longitude", "custom_android_id",
         "fixed_speed_value", "speed_expand_list", "download_video_path", "download_image_path",
         "video_duration_alert_threshold", "feed_filter_keywords_json", "video_fit_mode") +
         rangePrefixes.flatMap { listOf("${it}_min", "${it}_max") } +
