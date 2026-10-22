@@ -1,0 +1,15 @@
+{
+  "name": "profile_alpha",
+  "android_id": "da4d8cd9b3b66d8b",
+  "wifi_bssid": "48:fd:8e:cd:c1:81",
+  "wifi_ssid": "\"STC_5G_Home_B47\"",
+  "latitude": "24.779075",
+  "longitude": "46.643241",
+  "lte_tac": 14101,
+  "lte_ci": 28610784,
+  "lte_pci": 319,
+  "sim_operator": "STC",
+  "sim_mcc_mnc": "42001",
+  "country": "SA",
+  "created_at": "2026-10-22 17:55:26"
+}

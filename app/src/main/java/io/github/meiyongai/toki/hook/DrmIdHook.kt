@@ -83,10 +83,12 @@ object DrmIdHook {
                 module.trackHook("DrmIdHook", method, requiresConfiguration = false).intercept { chain ->
                     val propertyName = chain.args[0] as? String
                     if (isFeatureEnabled() && (propertyName == MediaDrm.PROPERTY_DEVICE_UNIQUE_ID || propertyName == "deviceUniqueId")) {
-                        DETERMINISTIC_DRM_ID
+                        val md = java.security.MessageDigest.getInstance("SHA-256")
+                        md.digest(activeAndroidId.toByteArray(Charsets.UTF_8))
                     } else {
                         chain.proceed()
                     }
+
                 }
             }
         }
