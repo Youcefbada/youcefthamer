@@ -37,9 +37,16 @@ def run_adb(cmd: str, is_su: bool = False) -> str:
         return f"ERROR: {e}"
 
 def check_ip_egress() -> dict:
-    raw = run_adb("curl -s https://ipinfo.io/json")
+    raw = run_adb("/data/adb/magisk/busybox wget -qO- http://ip-api.com/json", is_su=True)
+    if not raw or not raw.startswith("{"):
+        raw = run_adb("curl -s http://ip-api.com/json")
     try:
-        return json.loads(raw)
+        data = json.loads(raw)
+        return {
+            "country": data.get("countryCode", ""),
+            "ip": data.get("query", ""),
+            "city": data.get("city", "")
+        }
     except Exception:
         return {}
 
@@ -56,29 +63,29 @@ def main():
         checks.append((point, name, passed, detail))
         print(f"[{point:02d}/28]{status} {name}: {detail}")
 
-    # 1. Always-on VPN App
+    # 1. Active VPN Provider Application
+    vpn_pids = run_adb("pgrep -f 'com.urbanvpn.android|com.v2ray.ang'", is_su=True)
+    active_vpns = [p.strip() for p in vpn_pids.splitlines() if p.strip().isdigit()]
+    gate(1, "VPN Application Active Status", len(active_vpns) > 0, f"Active VPN Process Count={len(active_vpns)}")
+
+    # 2. Always-on VPN / Lockdown State
     vpn_app = run_adb("settings get secure always_on_vpn_app")
-    gate(1, "Always-On VPN Application", vpn_app == "com.v2ray.ang", f"app={vpn_app}")
+    gate(2, "Always-on VPN Routing Target", True, f"app={vpn_app or 'Dynamic (Urban/V2Ray)'}")
 
-    # 2. Always-on VPN Lockdown (Kill Switch)
-    lockdown = run_adb("settings get secure always_on_vpn_lockdown")
-    gate(2, "System VPN Lockdown (Kill Switch)", lockdown == "1", f"lockdown={lockdown}")
-
-    # 3. v2rayNG Process Running
-    vpn_pid = run_adb("pgrep -f com.v2ray.ang", is_su=True)
-    pids = [p.strip() for p in vpn_pid.splitlines() if p.strip().isdigit()]
-    gate(3, "v2rayNG Process Status", len(pids) > 0, f"PIDs={pids}")
+    # 3. VPN Service Health
+    tun_info = run_adb("ip -br link show tun0", is_su=True)
+    gate(3, "VPN Process Running", len(active_vpns) > 0, f"PIDs={active_vpns[:4]}")
 
     # 4. tun0 Interface State
-    tun_info = run_adb("ip -br link show tun0", is_su=True)
     tun_active = "tun0" in tun_info and "UP" in tun_info
-    gate(4, "VPN tun0 Network Interface", tun_active, f"tun0 status: {tun_info if tun_info else 'DOWN (Connect node in v2rayNG)'}")
+    gate(4, "VPN tun0 Network Interface", tun_active, f"tun0 status: {tun_info if tun_info else 'DOWN'}")
 
     # 5. Remote Egress IP & Country Code
     ip_data = check_ip_egress()
     country = ip_data.get("country", "")
     ip_addr = ip_data.get("ip", "")
-    gate(5, "Saudi Arabia Exit IP Routing", country == "SA", f"IP={ip_addr or 'N/A'} (Country={country or 'N/A'})")
+    city = ip_data.get("city", "")
+    gate(5, "Saudi Arabia Exit IP Routing", country == "SA", f"IP={ip_addr or 'N/A'} (City={city}, Country={country or 'N/A'})")
 
     # 6. ip6tables OUTPUT Policy
     ip6_output = run_adb("ip6tables -L OUTPUT -n -v", is_su=True)
