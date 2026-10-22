@@ -34,9 +34,16 @@ signing.properties
 *.xapk
 *.aab
 /research/firmware/
-/research/tools/
+/research/tools/*
+!/research/tools/*.sh
+!/research/tools/*.java
+!/research/tools/*.xml
+!/research/tools/touch_driver.jar
 /research/upstream/
+
 *.part
 *.enc4
 *.png
+*.bin
+
 

@@ -1,0 +1,23 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <long name="__toki_import_revision" value="1" />
+    <long name="__toki_revision" value="10" />
+    <int name="__toki_protocol" value="1" />
+    <boolean name="sim_spoof_enabled" value="true" />
+    <string name="target_region">SA</string>
+    <string name="sim_operator_code">42001</string>
+    <string name="sim_operator_name">STC</string>
+    <boolean name="language_spoof_enabled" value="true" />
+    <boolean name="language_follow_region" value="true" />
+    <string name="custom_language">ar-SA</string>
+    <boolean name="timezone_spoof_enabled" value="true" />
+    <boolean name="timezone_follow_region" value="true" />
+    <string name="custom_timezone">Asia/Riyadh</string>
+    <boolean name="gps_spoof_enabled" value="true" />
+    <boolean name="gps_follow_region" value="true" />
+    <string name="custom_latitude">24.7136</string>
+    <string name="custom_longitude">46.6753</string>
+    <boolean name="download_force_no_watermark" value="true" />
+    <boolean name="feed_remove_ads" value="true" />
+    <boolean name="show_author_location" value="true" />
+</map>

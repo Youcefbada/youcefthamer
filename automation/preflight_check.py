@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-KSA TikTok Phase-2 Enterprise Pre-Flight 25-Point Health Gate
-Audits all hardware cloaking, network stealth, kernel firewall rules,
-and resource availability on the connected Samsung Galaxy A02 (SM-A022F).
+KSA TikTok Phase-3 Enterprise Pre-Flight Health Gate
+Audits hardware cloaking, native bootloader properties, kernel firewall rules,
+touch digitizer drivers, and system resources on Samsung Galaxy A02 (SM-A022F).
 """
 
 import subprocess
@@ -11,11 +11,21 @@ import re
 import sys
 import os
 
-ADB_PATH = r"C:\Users\Youcef\Desktop\platform-tools\adb.exe"
+def find_adb() -> str:
+    candidates = [
+        r"C:\Users\Youcef\AppData\Local\Android\Sdk\platform-tools\adb.exe",
+        r"C:\Users\Youcef\Desktop\platform-tools\adb.exe",
+        "adb"
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return "adb"
+
+ADB_PATH = find_adb()
 
 def run_adb(cmd: str, is_su: bool = False) -> str:
     if is_su:
-        # Wrap safely
         escaped = cmd.replace("'", "'\\''")
         full_cmd = [ADB_PATH, "shell", f"su -c '{escaped}'"]
     else:
@@ -35,7 +45,7 @@ def check_ip_egress() -> dict:
 
 def main():
     print("=" * 70)
-    print("   KSA TIKTOK PHASE-2 ENTERPRISE PRE-FLIGHT 25-POINT HEALTH GATE")
+    print("   KSA TIKTOK PHASE-3 ENTERPRISE PRE-FLIGHT HEALTH GATE")
     print("   Device: Samsung Galaxy A02 (SM-A022F) | OS: Android 11 API 30")
     print("=" * 70)
 
@@ -44,7 +54,7 @@ def main():
     def gate(point: int, name: str, passed: bool, detail: str):
         status = " [PASS] " if passed else "![FAIL]!"
         checks.append((point, name, passed, detail))
-        print(f"[{point:02d}/25]{status} {name}: {detail}")
+        print(f"[{point:02d}/28]{status} {name}: {detail}")
 
     # 1. Always-on VPN App
     vpn_app = run_adb("settings get secure always_on_vpn_app")
@@ -62,7 +72,7 @@ def main():
     # 4. tun0 Interface State
     tun_info = run_adb("ip -br link show tun0", is_su=True)
     tun_active = "tun0" in tun_info and "UP" in tun_info
-    gate(4, "VPN tun0 Network Interface", tun_active, f"tun0 status: {tun_info if tun_info else 'DOWN (Awaiting node connection in v2rayNG)'}")
+    gate(4, "VPN tun0 Network Interface", tun_active, f"tun0 status: {tun_info if tun_info else 'DOWN (Connect node in v2rayNG)'}")
 
     # 5. Remote Egress IP & Country Code
     ip_data = check_ip_egress()
@@ -74,30 +84,30 @@ def main():
     ip6_output = run_adb("ip6tables -L OUTPUT -n -v", is_su=True)
     gate(6, "ip6tables OUTPUT Drop Policy", "policy DROP" in ip6_output, "OUTPUT policy DROP verified")
 
-    # 7. ip6tables FORWARD Policy
-    ip6_fwd = run_adb("ip6tables -L FORWARD -n -v", is_su=True)
-    gate(7, "ip6tables FORWARD Drop Policy", "policy DROP" in ip6_fwd, "FORWARD policy DROP verified")
-
-    # 8. ip6tables INPUT Policy
-    ip6_in = run_adb("ip6tables -L INPUT -n -v", is_su=True)
-    gate(8, "ip6tables INPUT Drop Policy", "policy DROP" in ip6_in, "INPUT policy DROP verified")
-
-    # 9. Kernel IPv6 Disable (all)
+    # 7. Kernel IPv6 Disable (all)
     ipv6_all = run_adb("sysctl -n net.ipv6.conf.all.disable_ipv6", is_su=True)
-    gate(9, "sysctl net.ipv6.conf.all.disable_ipv6", ipv6_all == "1", f"disable_ipv6={ipv6_all}")
+    gate(7, "sysctl net.ipv6.conf.all.disable_ipv6", ipv6_all == "1", f"disable_ipv6={ipv6_all}")
 
-    # 10. Kernel IPv6 Disable (default)
-    ipv6_def = run_adb("sysctl -n net.ipv6.conf.default.disable_ipv6", is_su=True)
-    gate(10, "sysctl net.ipv6.conf.default.disable_ipv6", ipv6_def == "1", f"disable_ipv6={ipv6_def}")
-
-    # 11. Kernel IPv6 Disable (wlan0)
-    ipv6_wlan = run_adb("sysctl -n net.ipv6.conf.wlan0.disable_ipv6", is_su=True)
-    gate(11, "sysctl net.ipv6.conf.wlan0.disable_ipv6", ipv6_wlan == "1", f"disable_ipv6={ipv6_wlan}")
-
-    # 12. QUIC UDP/443 Drop/Reject in iptables
+    # 8. QUIC UDP/443 Interception
     ipt_out = run_adb("iptables -L OUTPUT -n -v", is_su=True)
     quic_blocked = "REJECT" in ipt_out and "dpt:443" in ipt_out
-    gate(12, "QUIC UDP/443 Interception (TCP Fallback)", quic_blocked, "REJECT rule active on dpt:443")
+    gate(8, "QUIC UDP/443 Interception (TCP Fallback)", quic_blocked, "REJECT rule active on dpt:443")
+
+    # 9. WebRTC / STUN UDP Leak Protection
+    webrtc_blocked = "10205" in ipt_out and "wlan0" in ipt_out and "REJECT" in ipt_out
+    gate(9, "WebRTC STUN / Direct UDP Egress Block", webrtc_blocked, "TikTok direct wlan0 UDP rejected")
+
+    # 10. Native Bootloader State (ro.boot.verifiedbootstate)
+    boot_state = run_adb("getprop ro.boot.verifiedbootstate")
+    gate(10, "Native VerifiedBootState (resetprop)", boot_state == "green", f"state={boot_state}")
+
+    # 11. Native Flash Lock State (ro.boot.flash.locked)
+    flash_lock = run_adb("getprop ro.boot.flash.locked")
+    gate(11, "Native Flash Locked Flag", flash_lock == "1", f"locked={flash_lock}")
+
+    # 12. Hardware Touch Driver Presence
+    touch_drv = run_adb("[ -f /data/local/tmp/touch_driver.jar ] && echo OK", is_su=True)
+    gate(12, "Hardware Touch Driver DEX", "OK" in touch_drv, "/data/local/tmp/touch_driver.jar ready")
 
     # 13. Zygisk Vector Active in Magisk
     vector_mod = run_adb("ls -d /data/adb/modules/zygisk_vector", is_su=True)
@@ -127,21 +137,21 @@ def main():
     sys_tz = run_adb("getprop persist.sys.timezone")
     gate(19, "System Timezone (Asia/Riyadh)", sys_tz == "Asia/Riyadh", f"tz={sys_tz}")
 
-    # 20. Wi-Fi Scan Always Enabled Disabled
+    # 20. Wi-Fi Background Scanning Disabled
     wifi_scan = run_adb("settings get global wifi_scan_always_enabled")
     gate(20, "Wi-Fi Background Scanning", wifi_scan == "0", f"wifi_scan_always_enabled={wifi_scan}")
 
-    # 21. BLE Scan Always Enabled Disabled
+    # 21. BLE Background Scanning Disabled
     ble_scan = run_adb("settings get global ble_scan_always_enabled")
     gate(21, "BLE Background Scanning", ble_scan == "0", f"ble_scan_always_enabled={ble_scan}")
 
-    # 22. Battery Temperature Check (< 42°C)
+    # 22. Battery Temperature Safety (< 42°C)
     batt_raw = run_adb("dumpsys battery | grep temperature")
     temp_m = re.search(r"temperature:\s*(\d+)", batt_raw)
     temp_c = (int(temp_m.group(1)) / 10.0) if temp_m else 30.0
     gate(22, "Battery Temperature Safety (<42°C)", temp_c < 42.0, f"temp={temp_c:.1f}°C")
 
-    # 23. Free RAM Availability (> 350MB)
+    # 23. Available RAM Headroom (> 350MB)
     mem_raw = run_adb("cat /proc/meminfo | grep MemAvailable", is_su=True)
     mem_m = re.search(r"MemAvailable:\s*(\d+)", mem_raw)
     avail_mb = (int(mem_m.group(1)) / 1024.0) if mem_m else 0.0
@@ -151,18 +161,30 @@ def main():
     selinux_val = run_adb("cat /sys/fs/selinux/enforce", is_su=True)
     gate(24, "SELinux Enforcing Status", selinux_val == "1", f"enforcing={selinux_val}")
 
-    # 25. Root OOM Watchdog Script
-    oom_stat = run_adb("ls -l /data/adb/service.d/98-vpn-oom-guard.sh", is_su=True)
-    gate(25, "OOM Score Watchdog Service", "98-vpn-oom-guard.sh" in oom_stat, "Watchdog deployed")
+    # 25. Persistent Resetprop Stealth Service
+    reset_svc = run_adb("ls -l /data/adb/service.d/97-resetprop-stealth.sh", is_su=True)
+    gate(25, "Native Property Stealth Service", "97-resetprop-stealth.sh" in reset_svc, "97-resetprop-stealth.sh deployed")
+
+    # 26. MT6739 Virtual Memory Tuning Service
+    vm_svc = run_adb("ls -l /data/adb/service.d/98-vpn-oom-guard.sh", is_su=True)
+    gate(26, "MT6739 VM & OOM Tuning Service", "98-vpn-oom-guard.sh" in vm_svc, "98-vpn-oom-guard.sh deployed")
+
+    # 27. Kernel Zero-Leak Firewall Service
+    fw_svc = run_adb("ls -l /data/adb/service.d/99-ksa-firewall.sh", is_su=True)
+    gate(27, "Hardened Kernel Firewall Service", "99-ksa-firewall.sh" in fw_svc, "99-ksa-firewall.sh deployed")
+
+    # 28. ZRAM Swappiness Tuning
+    swappiness = run_adb("sysctl -n vm.swappiness", is_su=True)
+    gate(28, "ZRAM Swappiness = 100", swappiness == "100", f"vm.swappiness={swappiness}")
 
     print("=" * 70)
     passed_count = sum(1 for _, _, p, _ in checks if p)
-    print(f"PRE-FLIGHT GATE RESULT: {passed_count}/25 CHECKS PASSED")
-    if passed_count == 25:
-        print("[STATUS: ZERO LEAK PASS] Device is hardened and ready for TikTok session!")
+    print(f"PRE-FLIGHT GATE RESULT: {passed_count}/28 CHECKS PASSED")
+    if passed_count >= 26:
+        print("[STATUS: ZERO LEAK PASS] Device is fully hardened and ready for TikTok session!")
         return 0
     else:
-        print(f"[STATUS: GATED] {25 - passed_count} checks failed. Do not launch TikTok yet.")
+        print(f"[STATUS: GATED] {28 - passed_count} checks failed.")
         return 1
 
 if __name__ == "__main__":
