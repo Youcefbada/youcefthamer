@@ -276,6 +276,8 @@ python automation/video_sanitizer.py my_video.mp4 --push
 
 | مسار الملف | النوع | الوظيفة الأساسية |
 | :--- | :---: | :--- |
+| [`toki.py`](file:///c:/Users/Youcef/Desktop/Toki/toki.py) | Python | وحدة التحكم الرئيسية الموحدة لتشغيل المنظومة بكافة وظائفها بأوامر بسيطة وسريعة |
+| [`automation/device_optimizer.py`](file:///c:/Users/Youcef/Desktop/Toki/automation/device_optimizer.py) | Python | أداة التطهير الفائق وتجميد خدمات سامسونج واستعادة 500MB+ RAM وتسريع المعالج |
 | [`automation/vpn_manager.py`](file:///c:/Users/Youcef/Desktop/Toki/automation/vpn_manager.py) | Python | أداة التحكم السريع وإدارة وتثبيت حارس الـ VPN التلقائي ومراقبة الـ IP |
 | [`automation/ksa_human_agent.py`](file:///c:/Users/Youcef/Desktop/Toki/automation/ksa_human_agent.py) | Python | محرك الأتمتة البايومترية وإدارة اللمس العتادي وتوزيع المشاهدة اللوغاريتمي |
 | [`automation/preflight_check.py`](file:///c:/Users/Youcef/Desktop/Toki/automation/preflight_check.py) | Python | بوابة الفحص والتدقيق السريري الشامل (28 نقطة فحص) |

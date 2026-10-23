@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""
+================================================================================
+  TOKI ENTERPRISE MASTER CONTROLLER (toki.py)
+  Unified Command Center for Samsung Galaxy A02 / TikTok KSA Hardening & Growth
+================================================================================
+Commands:
+  python toki.py status                 - Full 360-degree diagnostic audit (Preflight, IP Quality, RAM, VPN)
+  python toki.py debloat                - Freeze 30+ bloatware packages, drop caches, tune CPU governor
+  python toki.py warmup [count] [tier]  - Run bio-automation session (TIER_0 or TIER_1 velocity caps)
+  python toki.py vpn [cmd]              - Control VPN daemon (status, connect, disconnect, restart, logs)
+  python toki.py sanitize <video.mp4>   - Sanitize video, strip x264 SEI, inject Mac timestamps, push to DCIM
+  python toki.py tap <x> <y>            - Test physical capacitive tap with synchronous haptic tremor
+  python toki.py swipe <x1> <y1> <x2> <y2> [duration_ms] - Test hardware Bezier swipe with biological jerk
+  python toki.py profile [list|rotate]  - Manage and rotate hardware identity vaults
+================================================================================
+"""
+
+import subprocess
+import argparse
+import time
+import sys
+import os
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+AUTO_DIR = os.path.join(SCRIPT_DIR, "automation")
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+def print_banner():
+    banner = """
+================================================================================
+  TOKI ENTERPRISE MASTER CONTROLLER (toki.py)
+  KSA Enterprise Ghost & Anti-Detection Automation Engine
+  Target: Samsung Galaxy A02 (SM-A022F) | OS: Android 11 | STC KSA
+================================================================================
+"""
+    print(banner)
+
+def find_adb() -> str:
+    candidates = [
+        r"C:\Users\Youcef\AppData\Local\Android\Sdk\platform-tools\adb.exe",
+        r"C:\Users\Youcef\Desktop\platform-tools\adb.exe",
+        "adb"
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return "adb"
+
+ADB_PATH = find_adb()
+
+def run_script(script_name: str, args: list = None) -> int:
+    target = os.path.join(AUTO_DIR, script_name)
+    if not os.path.exists(target):
+        print(f"[!] Script not found: {target}")
+        return 1
+    cmd = [sys.executable, target] + (args or [])
+    return subprocess.run(cmd).returncode
+
+def cmd_status(args):
+    print("\n[STEP 1/4] Running Comprehensive Pre-Flight Health Audit (28 Checks)...")
+    run_script("preflight_check.py")
+
+    print("\n[STEP 2/4] Auditing Egress Network ASN & IP Quality...")
+    run_script("ip_quality_checker.py")
+
+    print("\n[STEP 3/4] Checking VPN Interface & Daemon Recovery Status...")
+    run_script("vpn_manager.py", ["status"])
+
+    print("\n[STEP 4/4] Auditing MT6739 RAM & Performance Headroom...")
+    run_script("device_optimizer.py")
+
+def cmd_debloat(args):
+    action = "restore" if args.restore else "debloat"
+    run_script("device_optimizer.py", [action] if args.restore else [])
+
+def cmd_warmup(args):
+    count = str(args.count) if args.count else "10"
+    tier = str(args.tier) if args.tier is not None else "0"
+    print(f"[*] Launching Phase-4 Bio-Automation: {count} videos on TIER_{tier}...")
+    run_script("ksa_human_agent.py", [count, tier])
+
+def cmd_vpn(args):
+    sub = args.subcommand or "status"
+    run_script("vpn_manager.py", [sub])
+
+def cmd_sanitize(args):
+    if not os.path.exists(args.video):
+        print(f"[!] Input video file does not exist: {args.video}")
+        return 1
+    push_flag = ["--push"] if args.push else []
+    run_script("video_sanitizer.py", [args.video] + push_flag)
+
+def cmd_tap(args):
+    jar = "/data/local/tmp/touch_driver.jar"
+    cmd = f"app_process -Djava.class.path={jar} /data/local/tmp io.github.meiyongai.toki.touch.TouchDriver tap {args.x} {args.y}"
+    print(f"[*] Executing hardware capacitive tap with haptic tremor at ({args.x}, {args.y})...")
+    subprocess.run([ADB_PATH, "shell", f"su -c '{cmd}'"])
+
+def cmd_swipe(args):
+    jar = "/data/local/tmp/touch_driver.jar"
+    duration = args.duration or 280
+    cmd = f"app_process -Djava.class.path={jar} /data/local/tmp io.github.meiyongai.toki.touch.TouchDriver swipe {args.x1} {args.y1} {args.x2} {args.y2} {duration}"
+    print(f"[*] Executing hardware capacitive Bezier swipe with biological jerk ({args.x1},{args.y1}) -> ({args.x2},{args.y2}) in {duration}ms...")
+    subprocess.run([ADB_PATH, "shell", f"su -c '{cmd}'"])
+
+def cmd_profile(args):
+    sub = args.subcommand or "list"
+    if sub == "list":
+        run_script("profile_vault.py", ["list"])
+    elif sub == "rotate":
+        run_script("profile_vault.py", ["rotate"])
+
+def main():
+    print_banner()
+
+    parser = argparse.ArgumentParser(
+        description="Toki Enterprise Master Controller",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
+
+    # status
+    p_status = subparsers.add_parser("status", help="Run full 360-degree system diagnostic audit")
+    p_status.set_defaults(func=cmd_status)
+
+    # debloat
+    p_debloat = subparsers.add_parser("debloat", help="Debloat Samsung bloatware & reclaim RAM")
+    p_debloat.add_argument("--restore", action="store_true", help="Restore all disabled packages")
+    p_debloat.set_defaults(func=cmd_debloat)
+
+    # warmup
+    p_warmup = subparsers.add_parser("warmup", help="Run organic human bio-automation session")
+    p_warmup.add_argument("count", type=int, nargs="?", default=10, help="Number of videos to consume (default: 10)")
+    p_warmup.add_argument("tier", type=int, nargs="?", default=0, help="Trust tier (0: hours 0-24, 1: hours 24-48)")
+    p_warmup.set_defaults(func=cmd_warmup)
+
+    # vpn
+    p_vpn = subparsers.add_parser("vpn", help="Manage VPN autostart daemon & routes")
+    p_vpn.add_argument("subcommand", nargs="?", default="status", choices=["status", "connect", "disconnect", "restart", "logs"])
+    p_vpn.set_defaults(func=cmd_vpn)
+
+    # sanitize
+    p_san = subparsers.add_parser("sanitize", help="Sanitize video for upload and push to DCIM")
+    p_san.add_argument("video", type=str, help="Path to input MP4 video file")
+    p_san.add_argument("--push", action="store_true", default=True, help="Automatically push sanitized video to DCIM/Camera")
+    p_san.set_defaults(func=cmd_sanitize)
+
+    # tap
+    p_tap = subparsers.add_parser("tap", help="Test hardware capacitive tap")
+    p_tap.add_argument("x", type=int, help="Screen X coordinate")
+    p_tap.add_argument("y", type=int, help="Screen Y coordinate")
+    p_tap.set_defaults(func=cmd_tap)
+
+    # swipe
+    p_swipe = subparsers.add_parser("swipe", help="Test hardware Bezier swipe")
+    p_swipe.add_argument("x1", type=float, help="Start X")
+    p_swipe.add_argument("y1", type=float, help="Start Y")
+    p_swipe.add_argument("x2", type=float, help="End X")
+    p_swipe.add_argument("y2", type=float, help="End Y")
+    p_swipe.add_argument("duration", type=int, nargs="?", default=280, help="Duration in ms (default: 280)")
+    p_swipe.set_defaults(func=cmd_swipe)
+
+    # profile
+    p_prof = subparsers.add_parser("profile", help="Manage hardware identity profiles")
+    p_prof.add_argument("subcommand", nargs="?", default="list", choices=["list", "rotate"])
+    p_prof.set_defaults(func=cmd_profile)
+
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
+
+    args = parser.parse_args()
+    if hasattr(args, "func"):
+        args.func(args)
+    else:
+        parser.print_help()
+
+if __name__ == "__main__":
+    main()

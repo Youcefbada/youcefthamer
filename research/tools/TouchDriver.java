@@ -35,6 +35,18 @@ public class TouchDriver {
         fos.flush();
     }
 
+    private static void triggerHapticTremor(final int ms) {
+        new Thread() {
+            @Override
+            public void run() {
+                try {
+                    Process p = Runtime.getRuntime().exec(new String[]{"cmd", "vibrator", "vibrate", String.valueOf(ms)});
+                    p.waitFor();
+                } catch (Exception ignored) {}
+            }
+        }.start();
+    }
+
     public static void main(String[] args) {
         if (args.length < 1) {
             System.out.println("Usage: TouchDriver swipe <x1> <y1> <x2> <y2> <duration_ms> | tap <x> <y>");
@@ -51,7 +63,8 @@ public class TouchDriver {
                 int x = Integer.parseInt(args[1]);
                 int y = Integer.parseInt(args[2]);
 
-                // Down
+                // Down & Synchronous Physical Accelerometer Micro-Tremor
+                triggerHapticTremor(12);
                 writeEvent(fos, buf, EV_ABS, ABS_MT_SLOT, 0);
                 writeEvent(fos, buf, EV_ABS, ABS_MT_TRACKING_ID, trackId);
                 writeEvent(fos, buf, EV_KEY, BTN_TOUCH, 1);
@@ -119,6 +132,8 @@ public class TouchDriver {
                 int numFrames = Math.max(10, durationMs / avgIntervalMs);
 
                 // Initial DOWN (light initial contact: pressure ~0.25, major ~35)
+                // Synchronous physical chassis tremor to excite STM LIS2DS accelerometer
+                triggerHapticTremor(16);
                 writeEvent(fos, buf, EV_ABS, ABS_MT_SLOT, 0);
                 writeEvent(fos, buf, EV_ABS, ABS_MT_TRACKING_ID, trackId);
                 writeEvent(fos, buf, EV_KEY, BTN_TOUCH, 1);
