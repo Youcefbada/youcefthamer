@@ -164,29 +164,72 @@ def adjust_media_volume():
     print(f"  [BIO-ACTION] Peripheral micro-signal: {key}")
     run_adb(f"input keyevent {key}")
 
+def follow_creator():
+    """Simulates tapping follow button on creator profile or sidebar."""
+    # Profile follow button or right-rail follow plus icon
+    follow_x = random.randint(645, 675)
+    follow_y = random.randint(1015, 1040)
+    print("  [BIO-ACTION] Executing organic follow action...")
+    execute_hw_tap(follow_x, follow_y)
+    # Argon 4 threshold: never follow faster than 1 every 15s
+    time.sleep(random.uniform(16.0, 22.0))
+
+# Action counters to strictly enforce Argon 4 TIER_0 and TIER_1 daily safety limits
+SESSION_STATS = {
+    "likes": 0,
+    "follows": 0,
+    "comments": 0,
+    "profile_checks": 0,
+    "volume_adjusts": 0,
+    "total_dwell_sec": 0.0
+}
+
+# Trust Tier Limits per Argon 4 Empirical Behavioral Vectors
+TIER_LIMITS = {
+    0: {  # Hours 0-24: Untrusted / Evaluation Sandbox
+        "max_likes": 15,
+        "max_follows": 6,
+        "max_comments": 2,
+        "max_profiles": 20,
+        "max_session_min": 25.0
+    },
+    1: {  # Hours 24-48: Active Consumer Trust Tier
+        "max_likes": 45,
+        "max_follows": 18,
+        "max_comments": 6,
+        "max_profiles": 60,
+        "max_session_min": 60.0
+    }
+}
+
 def compute_bimodal_dwell() -> tuple:
     """
-    Computes dwell time using an empirical Bimodal Log-Normal distribution:
-    - Mode A (~22% Fast-Skip): Log-normal centered around 1.4s (t in [0.8s, 2.4s])
-    - Mode B (~78% Engaged Completion): Log-normal centered around 20.0s (t in [9.0s, 48.0s])
+    Computes dwell time using exact Argon 4 Empirical Log-Normal Distribution:
+    ln(T_dwell) ~ N(mu=1.85, sigma^2=0.55) -> sigma = 0.7416
+    - Yields median dwell time ≈ 6.35s with heavy right tail (VCR 0.70-1.15).
+    - Mode A (22% Fast-Skip): Dwell in [1.6s, 2.8s] (strictly > 1.5s to avoid programmatic scraper flag)
+    - Mode B (78% Engaged Consumption): Truncated log-normal with mu=1.85, sigma=0.7416 (meets >60% VCR criterion)
     """
     is_engaged = random.random() < 0.78
     if is_engaged:
-        duration = random.lognormvariate(math.log(20.0), 0.35)
-        duration = max(9.0, min(duration, 48.0))
+        # Argon 4 Log-Normal formula
+        duration = random.lognormvariate(1.85, 0.7416)
+        # Ensure completion rate meets TIER_0 promotion threshold (min 6.0s, max 42.0s)
+        duration = max(6.0, min(duration, 42.0))
         return True, duration
     else:
-        duration = random.lognormvariate(math.log(1.4), 0.25)
-        duration = max(0.8, min(duration, 2.4))
+        # Avoid programmatic scraper flag: never stay under 1.5s on more than 75% items
+        duration = random.uniform(1.6, 2.8)
         return False, duration
 
-def simulate_session(num_videos: int = 15):
-    """Runs a realistic human TikTok session with high behavioral entropy."""
+def simulate_session(num_videos: int = 15, tier: int = 0):
+    """Runs a realistic human TikTok session with high behavioral entropy and strict Tier caps."""
+    limits = TIER_LIMITS.get(tier, TIER_LIMITS[0])
     print("=" * 70)
-    print(f"   STARTING PHASE-4 BEHAVIORAL ENTROPY BIO-AUTOMATION: {num_videos} VIDEOS")
-    print("   Touch Driver: /dev/input/event3 (sec_touchscreen Multi-Touch Type B)")
-    print("   Distribution: Bimodal Log-Normal (Weibull/Human Mixture)")
-    print("   Spatial State: Dynamic 2D Postural Drift (Ornstein-Uhlenbeck)")
+    print(f"   STARTING PHASE-4 BEHAVIORAL ENTROPY BIO-AUTOMATION: {num_videos} VIDEOS (TIER_{tier})")
+    print("   Touch Driver : /dev/input/event3 (sec_touchscreen Multi-Touch Type B)")
+    print("   Distribution : Argon 4 Log-Normal (mu=1.85, sigma=0.7416, Median=6.35s)")
+    print(f"   Safety Gate  : TIER_{tier} Limits (Likes<={limits['max_likes']}, Follows<={limits['max_follows']}, Comments<={limits['max_comments']})")
     print("=" * 70)
 
     ensure_driver()
@@ -196,45 +239,66 @@ def simulate_session(num_videos: int = 15):
     time.sleep(4.0)
 
     for i in range(1, num_videos + 1):
+        # Enforce max cumulative dwell duration to avoid >4h continuous streaming flag
+        if (SESSION_STATS["total_dwell_sec"] / 60.0) >= limits["max_session_min"]:
+            print(f"[GATE] Reached maximum safe cumulative dwell ({limits['max_session_min']}m). Pausing session.")
+            break
+
         is_engaged, watch_duration = compute_bimodal_dwell()
+        SESSION_STATS["total_dwell_sec"] += watch_duration
 
         if is_engaged:
             print(f"[{i:02d}/{num_videos}] [ENGAGED MODE] Watching high-relevance Gulf content for {watch_duration:.1f}s...")
             time.sleep(watch_duration)
 
-            # Probabilistic Markov micro-transitions
+            # Probabilistic Markov micro-transitions constrained by Tier limits
             roll = random.random()
-            if roll < 0.16:
+            if roll < 0.14 and SESSION_STATS["likes"] < limits["max_likes"]:
                 double_tap_like()
+                SESSION_STATS["likes"] += 1
                 time.sleep(random.uniform(1.2, 2.4))
-            elif roll < 0.25:
+            elif roll < 0.20 and SESSION_STATS["follows"] < limits["max_follows"]:
+                follow_creator()
+                SESSION_STATS["follows"] += 1
+            elif roll < 0.27 and SESSION_STATS["comments"] < limits["max_comments"]:
                 inspect_comments()
+                SESSION_STATS["comments"] += 1
                 time.sleep(random.uniform(1.0, 2.0))
-            elif roll < 0.31:
+            elif roll < 0.33:
                 pause_and_resume()
                 time.sleep(random.uniform(0.8, 1.6))
-            elif roll < 0.36:
+            elif roll < 0.39 and SESSION_STATS["profile_checks"] < limits["max_profiles"]:
                 inspect_creator_profile()
+                SESSION_STATS["profile_checks"] += 1
                 time.sleep(random.uniform(1.2, 2.2))
             
             # 10% chance of subtle media volume micro-adjustment
             if random.random() < 0.10:
                 adjust_media_volume()
+                SESSION_STATS["volume_adjusts"] += 1
         else:
             print(f"[{i:02d}/{num_videos}] [SKIP MODE] Fast-skipping non-engaging hook after {watch_duration:.1f}s...")
             time.sleep(watch_duration)
 
-        print(f"[{i:02d}/{num_videos}] Executing hardware capacitive Bezier swipe with postural drift...")
+        print(f"[{i:02d}/{num_videos}] Executing hardware capacitive Bezier swipe with biological jerk...")
         execute_bezier_swipe()
 
         time.sleep(random.uniform(0.45, 0.95))
 
+    # Clean session completion: Background the app to prevent continuous streaming flag
+    print("\n[CLEANUP] Backgrounding TikTok app to record organic session boundary...")
+    run_adb("input keyevent KEYCODE_HOME")
+
     print("=" * 70)
     print("   PHASE-4 BIO-AUTOMATION SESSION COMPLETED SUCCESSFULLY")
+    print(f"   Session Summary: Dwell={SESSION_STATS['total_dwell_sec']/60:.1f}min | Likes={SESSION_STATS['likes']} | Follows={SESSION_STATS['follows']} | Comments={SESSION_STATS['comments']} | Profiles={SESSION_STATS['profile_checks']}")
     print("=" * 70)
 
 if __name__ == "__main__":
     count = 10
+    tier = 0
     if len(sys.argv) > 1 and sys.argv[1].isdigit():
         count = int(sys.argv[1])
-    simulate_session(count)
+    if len(sys.argv) > 2 and sys.argv[2].isdigit():
+        tier = int(sys.argv[2])
+    simulate_session(count, tier)

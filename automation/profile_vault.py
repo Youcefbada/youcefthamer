@@ -129,8 +129,18 @@ def deploy_profile_to_device(profile: dict):
     # 2. Surgical Clean-Slate Purge
     print("[DEPLOY] Performing surgical clean-slate purge...")
     run_adb("pm clear com.zhiliaoapp.musically")
-    # Clean hidden cache and residual identifiers
-    run_adb("rm -rf /data/data/com.zhiliaoapp.musically/app_applog* /data/data/com.zhiliaoapp.musically/shared_prefs/*applog*", is_su=True)
+    # Clean hidden cache, databases, shared_prefs, and external storage residual identifiers (Argon 4 recommendation)
+    purge_cmds = (
+        "rm -rf /data/data/com.zhiliaoapp.musically/app_applog* "
+        "/data/data/com.zhiliaoapp.musically/shared_prefs/* "
+        "/data/data/com.zhiliaoapp.musically/databases/* "
+        "/data/data/com.zhiliaoapp.musically/files/* "
+        "/sdcard/Android/data/com.zhiliaoapp.musically "
+        "/sdcard/Android/media/com.zhiliaoapp.musically "
+        "/data/media/0/Android/data/com.zhiliaoapp.musically && "
+        "touch -m /sdcard/Android 2>/dev/null"
+    )
+    run_adb(purge_cmds, is_su=True)
 
     # 3. Build new Toki config XML
     xml_content = f"""<?xml version='1.0' encoding='utf-8' standalone='yes' ?>

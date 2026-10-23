@@ -77,7 +77,45 @@ def sanitize_h264_sei_and_atoms(input_path: str, output_path: str) -> bool:
                 total_scrubbed += 1
                 pos = idx + len(sig)
 
-        # 2. H.264 Elementary Stream NAL Unit Inspection
+        # 2. Patch Handler Reference Names to match Android MediaMuxer (Argon 4 Rule)
+        # Android writes "VideoHandle" & "SoundHandle" (11 bytes + null). Desktop FFmpeg writes "VideoHandler" & "SoundHandler" (12 bytes).
+        hdlr_scrubbed = 0
+        vh_idx = 0
+        while True:
+            vh_idx = data.find(b"VideoHandler", vh_idx)
+            if vh_idx == -1: break
+            data[vh_idx : vh_idx + 12] = b"VideoHandle\x00"
+            hdlr_scrubbed += 1
+            vh_idx += 12
+
+        sh_idx = 0
+        while True:
+            sh_idx = data.find(b"SoundHandler", sh_idx)
+            if sh_idx == -1: break
+            data[sh_idx : sh_idx + 12] = b"SoundHandle\x00"
+            hdlr_scrubbed += 1
+            sh_idx += 12
+
+        # 3. Patch Container Creation Timestamps (mvhd, tkhd, mdhd)
+        # Desktop FFmpeg defaults to 0 (Jan 1, 1904). Genuine Android Camera writes current Mac epoch (seconds since 1904).
+        mac_epoch_now = int(time.time()) + 2082844800  # Delta between 1904 and 1970
+        ts_bytes = struct.pack(">I", mac_epoch_now)
+        for atom in [b"mvhd", b"tkhd", b"mdhd"]:
+            pos = 0
+            while True:
+                idx = data.find(atom, pos)
+                if idx == -1: break
+                # Check atom version (idx+4)
+                if idx + 16 <= len(data):
+                    version = data[idx + 4]
+                    if version == 0:  # 32-bit timestamp
+                        curr_ts = struct.unpack(">I", data[idx+8 : idx+12])[0]
+                        if curr_ts == 0 or curr_ts < 2082844800:
+                            data[idx+8 : idx+12] = ts_bytes   # creation_time
+                            data[idx+12 : idx+16] = ts_bytes  # modification_time
+                pos = idx + 4
+
+        # 4. H.264 Elementary Stream NAL Unit Inspection
         # Searches for Annex-B start codes (0x000001 or 0x00000001) with NAL Type 6 (SEI)
         pos = 0
         nal_sei_count = 0
@@ -115,7 +153,7 @@ def sanitize_h264_sei_and_atoms(input_path: str, output_path: str) -> bool:
         with open(output_path, "wb") as f:
             f.write(data)
 
-        print(f"[*] Deep Sanitizer Pass: Scrubbed {total_scrubbed} NLE tags, converted {nal_sei_count} x264 SEI NALs to Filler Data.")
+        print(f"[*] Deep Sanitizer Pass: Scrubbed {total_scrubbed} NLE tags, patched {hdlr_scrubbed} MediaMuxer handlers, fixed creation timestamps, and neutralized {nal_sei_count} x264 SEI NALs.")
         return True
     except Exception as e:
         print(f"[ERROR] Failed deep media sanitization: {e}")

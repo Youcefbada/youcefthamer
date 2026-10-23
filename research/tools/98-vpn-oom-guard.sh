@@ -11,9 +11,9 @@ sysctl -w vm.dirty_ratio=15 2>/dev/null
 sysctl -w vm.min_free_kbytes=16384 2>/dev/null
 sysctl -w vm.extra_free_kbytes=24576 2>/dev/null
 
-# 2. Continuous OOM Score Guardian for Proxy Engine
+# 2. Continuous OOM Score Guardian for Proxy & VPN Engines
 while true; do
-    PIDS=$(pgrep -f "com.v2ray.ang" 2>/dev/null)
+    PIDS=$(pgrep -f "com.v2ray.ang|com.urbanvpn.android|libpie_openvpn" 2>/dev/null)
     for p in $PIDS; do
         if [ -d "/proc/$p" ]; then
             echo -900 > /proc/$p/oom_score_adj 2>/dev/null

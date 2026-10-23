@@ -235,9 +235,13 @@
 
 اتبع هذه الخطوات البسيطة لتشغيل جلسة عمل احترافية آمنة في أي وقت:
 
-### الخطوة 1: توصيل الهاتف وتجهيز البروكسي
+### الخطوة 1: توصيل الهاتف وتجهيز البروكسي والـ VPN التلقائي
 1. صل الهاتف بالكمبيوتر عبر كابل USB وتأكد من تفعيل وضع تصحيح الأخطاء ADB.
-2. افتح تطبيق **v2rayNG** على الهاتف واضغط على السيرفر السعودي لتشغيله (ستظهر علامة المفتاح أعلى الشاشة).
+2. **الـ VPN يعمل الآن أوتوماتيكياً بالكامل:** بمجرد فتح الهاتف أو إقلاعه، تقوم خدمة المراقبة الدائمة [`94-vpn-autostart-daemon.sh`](file:///c:/Users/Youcef/Desktop/Toki/research/tools/94-vpn-autostart-daemon.sh) بالاتصال الفوري وتثبيت عنوان الرياض (السعودية) دون الحاجة لأي نقر يدوي.
+3. للتحكم في الـ VPN أو مراقبته برمجياً من الكمبيوتر، يمكنك استخدام الأداة الجديدة [`automation/vpn_manager.py`](file:///c:/Users/Youcef/Desktop/Toki/automation/vpn_manager.py):
+   ```bash
+   python automation/vpn_manager.py status
+   ```
 
 ### الخطوة 2: تشغيل الفحص السريري لسلامة النظام
 من خلال موجه الأوامر في الكمبيوتر داخل مجلد المشروع، نفذ الأمر:
@@ -272,18 +276,21 @@ python automation/video_sanitizer.py my_video.mp4 --push
 
 | مسار الملف | النوع | الوظيفة الأساسية |
 | :--- | :---: | :--- |
+| [`automation/vpn_manager.py`](file:///c:/Users/Youcef/Desktop/Toki/automation/vpn_manager.py) | Python | أداة التحكم السريع وإدارة وتثبيت حارس الـ VPN التلقائي ومراقبة الـ IP |
 | [`automation/ksa_human_agent.py`](file:///c:/Users/Youcef/Desktop/Toki/automation/ksa_human_agent.py) | Python | محرك الأتمتة البايومترية وإدارة اللمس العتادي وتوزيع المشاهدة اللوغاريتمي |
 | [`automation/preflight_check.py`](file:///c:/Users/Youcef/Desktop/Toki/automation/preflight_check.py) | Python | بوابة الفحص والتدقيق السريري الشامل (28 نقطة فحص) |
 | [`automation/profile_vault.py`](file:///c:/Users/Youcef/Desktop/Toki/automation/profile_vault.py) | Python | خزنة إدارة وتدوير الهويات العتادية والبصمات النظيفة |
 | [`automation/play_integrity_guard.py`](file:///c:/Users/Youcef/Desktop/Toki/automation/play_integrity_guard.py) | Python | أداة فحص واختبار نزاهة بيئة جوجل وشهادات Keymaster 4.0 |
 | [`automation/video_sanitizer.py`](file:///c:/Users/Youcef/Desktop/Toki/automation/video_sanitizer.py) | Python | أداة تعقيم الفيديو وحقن وسوم كاميرا سامسونج لمنع الصفر مشاهدة |
+| [`research/tools/94-vpn-autostart-daemon.sh`](file:///c:/Users/Youcef/Desktop/Toki/research/tools/94-vpn-autostart-daemon.sh) | Shell | شيطان Magisk الدائم لتشغيل وإعادة توصيل الـ VPN وحمايته تلقائياً فور فتح الهاتف |
 | [`research/tools/TouchDriver.java`](file:///c:/Users/Youcef/Desktop/Toki/research/tools/TouchDriver.java) | Java | الكود المصدري لسائق اللمس العتادي المباشر في النواة `/dev/input/event3` |
 | [`research/tools/touch_driver.jar`](file:///c:/Users/Youcef/Desktop/Toki/research/tools/touch_driver.jar) | DEX/JAR | السائق العتادي المترجم والجاهز للتشغيل الفوري على الهاتف |
 | [`research/tools/97-resetprop-stealth.sh`](file:///c:/Users/Youcef/Desktop/Toki/research/tools/97-resetprop-stealth.sh) | Shell | سكربت الإقلاع الدائم لتطهير البوت لودر في ذاكرة النظام (`green` / `locked`) |
-| [`research/tools/98-vpn-oom-guard.sh`](file:///c:/Users/Youcef/Desktop/Toki/research/tools/98-vpn-oom-guard.sh) | Shell | سكربت الإقلاع الدائم لحماية البروكسي من القتل وتحسين ذاكرة MT6739 ZRAM |
+| [`research/tools/98-vpn-oom-guard.sh`](file:///c:/Users/Youcef/Desktop/Toki/research/tools/98-vpn-oom-guard.sh) | Shell | سكربت الإقلاع الدائم لحماية الـ VPN من القتل وتحسين ذاكرة MT6739 ZRAM |
 | [`research/tools/99-ksa-firewall.sh`](file:///c:/Users/Youcef/Desktop/Toki/research/tools/99-ksa-firewall.sh) | Shell | جدار حماية النواة الدائم لإسقاط IPv6 ومنع تسريبات WebRTC و QUIC |
 | [`research/tools/95-zero-interface-redirect.sh`](file:///c:/Users/Youcef/Desktop/Toki/research/tools/95-zero-interface-redirect.sh) | Shell | سكربت البروكسي الشفاف معدوم الواجهات لإلغاء `tun0` من مقابس النواة |
-| [`research/bytedance-telemetry-attestation-deepdive.md`](file:///c:/Users/Youcef/Desktop/Toki/research/bytedance-telemetry-attestation-deepdive.md) | Markdown | المرجع العلمي النظري الشامل لكافة تحليلات الهندسة العكسية لمحركات تيك توك |
+| [`AUTOMATIC_VPN_IMPLEMENTATION.md`](file:///c:/Users/Youcef/Desktop/Toki/AUTOMATIC_VPN_IMPLEMENTATION.md) | Markdown | الدليل الشامل لنظام التشغيل التلقائي للـ VPN وحمايته من القتل ونواقل تسريبات الـ DNS والذاكرة |
+| [`ARGON4_DEEPDIVE_AR.md`](file:///c:/Users/Youcef/Desktop/Toki/ARGON4_DEEPDIVE_AR.md) | Markdown | التقرير الاستخباري المعماري الشامل لمعلومات أرغون 4 (نداءات النواة، كابتشا تورينغ، ومصفوفة الـ 48 ساعة) |
 | [`complete_v3.md`](file:///c:/Users/Youcef/Desktop/Toki/complete_v3.md) | Markdown | تقرير الإنجاز التقني للمرحلة الثالثة باللغة الإنجليزية |
 | [`COMPLETE_AR.md`](file:///c:/Users/Youcef/Desktop/Toki/COMPLETE_AR.md) | Markdown | هذا الدليل الشامل باللغة العربية |
 

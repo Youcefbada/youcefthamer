@@ -115,20 +115,28 @@ public class TouchDriver {
                 double cp2_x = x2 + (20 + rng.nextDouble() * 40);
                 double cp2_y = y2 + (180 + rng.nextDouble() * 120);
 
-                int frameIntervalMs = 16; // 60Hz
-                int numFrames = Math.max(10, durationMs / frameIntervalMs);
+                int avgIntervalMs = 16; // ~60Hz base
+                int numFrames = Math.max(10, durationMs / avgIntervalMs);
 
-                // Initial DOWN
+                // Initial DOWN (light initial contact: pressure ~0.25, major ~35)
                 writeEvent(fos, buf, EV_ABS, ABS_MT_SLOT, 0);
                 writeEvent(fos, buf, EV_ABS, ABS_MT_TRACKING_ID, trackId);
                 writeEvent(fos, buf, EV_KEY, BTN_TOUCH, 1);
                 writeEvent(fos, buf, EV_ABS, ABS_MT_POSITION_X, (int) Math.round(x1));
                 writeEvent(fos, buf, EV_ABS, ABS_MT_POSITION_Y, (int) Math.round(y1));
-                writeEvent(fos, buf, EV_ABS, ABS_MT_TOUCH_MAJOR, 35);
-                writeEvent(fos, buf, EV_ABS, ABS_MT_TOUCH_MINOR, 28);
+                int initMajor = 34 + rng.nextInt(5);
+                int initMinor = (int) Math.round(initMajor / (1.24 + rng.nextDouble() * 0.08));
+                writeEvent(fos, buf, EV_ABS, ABS_MT_TOUCH_MAJOR, initMajor);
+                writeEvent(fos, buf, EV_ABS, ABS_MT_TOUCH_MINOR, initMinor);
                 syn(fos, buf);
 
-                Thread.sleep(frameIntervalMs);
+                // Initial delay before first move frame with non-uniform delta t
+                int initSleep = 14 + rng.nextInt(5);
+                Thread.sleep(initSleep);
+
+                // Biological jerk state variables (AR(1) autoregressive muscular tremor)
+                double jerkX = 0.0;
+                double jerkY = 0.0;
 
                 for (int i = 1; i <= numFrames; i++) {
                     double t = (double) i / numFrames;
@@ -145,15 +153,18 @@ public class TouchDriver {
                     double curX = uuu * x1 + 3 * uu * easedT * cp1_x + 3 * u * tt * cp2_x + ttt * x2;
                     double curY = uuu * y1 + 3 * uu * easedT * cp1_y + 3 * u * tt * cp2_y + ttt * y2;
 
-                    // Add subtle physiological micro-tremor
-                    curX += (rng.nextGaussian() * 1.2);
-                    curY += (rng.nextGaussian() * 1.2);
+                    // Add biological jerk (sudden muscular micro-corrections) and 8-12Hz tremor
+                    jerkX = 0.60 * jerkX + (rng.nextGaussian() * 1.6);
+                    jerkY = 0.60 * jerkY + (rng.nextGaussian() * 1.6);
+                    curX += jerkX;
+                    curY += jerkY;
 
                     // Dynamic contact ellipse deformation
-                    // Starts light (~35), compresses to peak (~115), tapers off (~40)
-                    double deform = Math.sin(t * Math.PI);
-                    int major = (int) (35 + deform * 80);
-                    int minor = (int) (major / (1.20 + rng.nextDouble() * 0.12));
+                    // Starts light (~35), reaches peak (~115, pressure ~0.65) around t=0.40-0.50, decays upon lift-off (~40)
+                    double deform = Math.pow(Math.sin(t * Math.PI), 0.85);
+                    int major = (int) (34 + deform * 80 + rng.nextGaussian() * 1.5);
+                    major = Math.max(30, Math.min(125, major));
+                    int minor = (int) Math.round(major / (1.20 + rng.nextDouble() * 0.12));
 
                     writeEvent(fos, buf, EV_ABS, ABS_MT_POSITION_X, (int) Math.round(curX));
                     writeEvent(fos, buf, EV_ABS, ABS_MT_POSITION_Y, (int) Math.round(curY));
@@ -161,7 +172,11 @@ public class TouchDriver {
                     writeEvent(fos, buf, EV_ABS, ABS_MT_TOUCH_MINOR, minor);
                     syn(fos, buf);
 
-                    Thread.sleep(frameIntervalMs);
+                    // Non-uniform inter-sample delta t to ensure Var(dt) >> 0.001 ms^2
+                    // Destroys Turing's "Robotic Linearity Trap"
+                    int jitterMs = (int) Math.round(rng.nextGaussian() * 2.4);
+                    int dt = Math.max(11, Math.min(23, avgIntervalMs + jitterMs));
+                    Thread.sleep(dt);
                 }
 
                 // Final UP (lift-off)
