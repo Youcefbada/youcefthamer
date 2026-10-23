@@ -90,9 +90,29 @@ def print_status(state: dict):
     print(f"\n[*] Riyadh Peak Hours Window (20:30 - 22:30 KSA): {'[ACTIVE - GOLDEN HOUR]' if is_peak else '[INACTIVE]'}")
     print("=" * 72)
 
+# Saudi Arabia Usage Peak Windows (KSA Time / UTC+3)
+PEAK_WINDOWS = [(14, 16), (20, 25)]  # 25 represents 1 AM next day
+
+def is_within_peak_window(ksa_hour: int) -> bool:
+    """Checks if the current KSA hour falls within natural Saudi usage peaks."""
+    for start, end in PEAK_WINDOWS:
+        if end <= 24:
+            if start <= ksa_hour < end:
+                return True
+        else:
+            if ksa_hour >= start or ksa_hour < (end - 24):
+                return True
+    return False
+
 def run_session(day: int):
     state = load_state()
     now_ksa = get_current_ksa_time()
+    ksa_hour = now_ksa.hour
+
+    if not is_within_peak_window(ksa_hour):
+        print(f"[\u26a0 TIME ADVISORY] Current KSA time ({now_ksa.strftime('%H:%M')}) is outside peak usage windows.")
+        print(f"  Saudi peaks: 14:00-16:00 (afternoon) and 20:00-01:00 (evening).")
+        print(f"  Running sessions off-peak may reduce organic trust signals.")
 
     print(f"\n[INIT] Executing Warm-Up Session for Day {day}...")
 
@@ -106,8 +126,8 @@ def run_session(day: int):
     if day == 1:
         num_videos = 12
         print(f"[STAGE: DAY 1] Silent Ingestion Mode -> 0 likes, 0 follows, {num_videos} videos.")
-        # Execute human agent
-        cmd = [sys.executable, AGENT_SCRIPT, str(num_videos)]
+        # Execute human agent with SILENT tier (-1) to enforce zero engagement
+        cmd = [sys.executable, AGENT_SCRIPT, str(num_videos), "-1"]
         subprocess.run(cmd)
 
         session_record = {

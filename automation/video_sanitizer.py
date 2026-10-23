@@ -113,6 +113,12 @@ def sanitize_h264_sei_and_atoms(input_path: str, output_path: str) -> bool:
                         if curr_ts == 0 or curr_ts < 2082844800:
                             data[idx+8 : idx+12] = ts_bytes   # creation_time
                             data[idx+12 : idx+16] = ts_bytes  # modification_time
+                    elif version == 1 and idx + 24 <= len(data):  # 64-bit timestamp
+                        curr_ts = struct.unpack(">Q", data[idx+8 : idx+16])[0]
+                        if curr_ts == 0 or curr_ts < 2082844800:
+                            ts_bytes_64 = struct.pack(">Q", mac_epoch_now)
+                            data[idx+8 : idx+16] = ts_bytes_64   # creation_time
+                            data[idx+16 : idx+24] = ts_bytes_64  # modification_time
                 pos = idx + 4
 
         # 4. H.264 Elementary Stream NAL Unit Inspection

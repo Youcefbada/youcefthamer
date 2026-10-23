@@ -17,6 +17,8 @@ import random
 import math
 import sys
 import os
+import re
+import logging
 
 def find_adb() -> str:
     candidates = [
@@ -174,7 +176,41 @@ def follow_creator():
     # Argon 4 threshold: never follow faster than 1 every 15s
     time.sleep(random.uniform(16.0, 22.0))
 
-# Action counters to strictly enforce Argon 4 TIER_0 and TIER_1 daily safety limits
+def search_trending_hashtag():
+    """Simulates opening TikTok search and browsing a trending Saudi hashtag."""
+    SAUDI_HASHTAGS = ["السعودية", "الرياض", "موضة", "طبخ_سعودي", "كوميديا", "رياضة", "جدة", "مكة"]
+    tag = random.choice(SAUDI_HASHTAGS)
+    print(f"  [BIO-ACTION] Searching trending Saudi hashtag: #{tag}")
+    # Tap search/discover icon (bottom nav)
+    execute_hw_tap(random.randint(130, 170), random.randint(1530, 1560))
+    time.sleep(random.uniform(2.0, 3.0))
+    # Tap search bar
+    execute_hw_tap(random.randint(300, 420), random.randint(80, 120))
+    time.sleep(1.5)
+    # Type hashtag via ADB input
+    run_adb(f"input text '#{tag}'")
+    time.sleep(1.5)
+    run_adb("input keyevent 66")  # ENTER / IME_ACTION
+    time.sleep(random.uniform(4.0, 8.0))
+    # Scroll through search results
+    execute_bezier_swipe()
+    time.sleep(random.uniform(3.0, 6.0))
+    # Return to For You feed
+    run_adb("input keyevent KEYCODE_BACK")
+    time.sleep(1.0)
+    run_adb("input keyevent KEYCODE_BACK")
+
+def open_share_sheet():
+    """Opens share sheet and dismisses — generates organic share intent signal without sending."""
+    share_x = random.randint(645, 680)
+    share_y = random.randint(1140, 1180)
+    print("  [BIO-ACTION] Opening share sheet (organic share intent signal)...")
+    execute_hw_tap(share_x, share_y)
+    time.sleep(random.uniform(1.5, 2.8))
+    # Dismiss share sheet without actually sharing
+    run_adb("input keyevent KEYCODE_BACK")
+
+# Action counters to strictly enforce Argon 4 TIER_0 through TIER_3 daily safety limits
 SESSION_STATS = {
     "likes": 0,
     "follows": 0,
@@ -186,6 +222,13 @@ SESSION_STATS = {
 
 # Trust Tier Limits per Argon 4 Empirical Behavioral Vectors
 TIER_LIMITS = {
+    -1: {  # Silent Ingestion (Day 1 Pure Observation — Zero Engagement)
+        "max_likes": 0,
+        "max_follows": 0,
+        "max_comments": 0,
+        "max_profiles": 5,
+        "max_session_min": 20.0
+    },
     0: {  # Hours 0-24: Untrusted / Evaluation Sandbox
         "max_likes": 15,
         "max_follows": 6,
@@ -199,6 +242,20 @@ TIER_LIMITS = {
         "max_comments": 6,
         "max_profiles": 60,
         "max_session_min": 60.0
+    },
+    2: {  # Hours 48-96: Trusted Consumer
+        "max_likes": 80,
+        "max_follows": 35,
+        "max_comments": 15,
+        "max_profiles": 120,
+        "max_session_min": 90.0
+    },
+    3: {  # Hours 96+: Established Creator
+        "max_likes": 150,
+        "max_follows": 60,
+        "max_comments": 30,
+        "max_profiles": 200,
+        "max_session_min": 120.0
     }
 }
 
@@ -225,6 +282,23 @@ def compute_bimodal_dwell() -> tuple:
 def simulate_session(num_videos: int = 15, tier: int = 0):
     """Runs a realistic human TikTok session with high behavioral entropy and strict Tier caps."""
     limits = TIER_LIMITS.get(tier, TIER_LIMITS[0])
+
+    # Reset session counters for fresh state each invocation
+    for key in SESSION_STATS:
+        SESSION_STATS[key] = 0 if isinstance(SESSION_STATS[key], int) else 0.0
+
+    # Setup session file logging for persistence
+    log_dir = os.path.join(os.path.dirname(__file__), "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, f"session_{time.strftime('%Y%m%d_%H%M%S')}.log")
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+    session_log = logging.getLogger("toki.session")
+    session_log.handlers.clear()  # Prevent duplicate handlers on re-invocation
+    session_log.addHandler(file_handler)
+    session_log.setLevel(logging.INFO)
+    session_log.info(f"Session start: {num_videos} videos, TIER_{tier}, limits={limits}")
+
     print("=" * 70)
     print(f"   STARTING PHASE-4 BEHAVIORAL ENTROPY BIO-AUTOMATION: {num_videos} VIDEOS (TIER_{tier})")
     print("   Touch Driver : /dev/input/event3 (sec_touchscreen Multi-Touch Type B)")
@@ -271,6 +345,12 @@ def simulate_session(num_videos: int = 15, tier: int = 0):
                 inspect_creator_profile()
                 SESSION_STATS["profile_checks"] += 1
                 time.sleep(random.uniform(1.2, 2.2))
+            elif roll < 0.43:
+                search_trending_hashtag()
+                time.sleep(random.uniform(2.0, 4.0))
+            elif roll < 0.47:
+                open_share_sheet()
+                time.sleep(random.uniform(1.0, 2.0))
             
             # 10% chance of subtle media volume micro-adjustment
             if random.random() < 0.10:
@@ -283,6 +363,26 @@ def simulate_session(num_videos: int = 15, tier: int = 0):
         print(f"[{i:02d}/{num_videos}] Executing hardware capacitive Bezier swipe with biological jerk...")
         execute_bezier_swipe()
 
+        # Thermal and RAM safety guards (check every 5 videos)
+        if i % 5 == 0:
+            batt_raw = run_adb("dumpsys battery | grep temperature")
+            temp_m = re.search(r"temperature:\s*(\d+)", batt_raw)
+            if temp_m and int(temp_m.group(1)) / 10.0 > 40.0:
+                temp_c = int(temp_m.group(1)) / 10.0
+                print(f"[THERMAL GUARD] Battery at {temp_c:.1f}\u00b0C (>40\u00b0C)! Cooling pause 120s...")
+                session_log.info(f"Thermal guard triggered: {temp_c:.1f}C")
+                run_adb("input keyevent KEYCODE_HOME")
+                time.sleep(120)
+                run_adb("am start -n com.zhiliaoapp.musically/com.ss.android.ugc.aweme.splash.SplashActivity")
+                time.sleep(4.0)
+            mem_raw = run_adb("cat /proc/meminfo | grep MemAvailable", is_su=True)
+            mem_m = re.search(r"MemAvailable:\s*(\d+)", mem_raw)
+            if mem_m and int(mem_m.group(1)) / 1024.0 < 250:
+                print("[RAM GUARD] Available RAM < 250MB! Dropping caches...")
+                session_log.info(f"RAM guard triggered: {int(mem_m.group(1)) / 1024.0:.0f}MB available")
+                run_adb("echo 3 > /proc/sys/vm/drop_caches", is_su=True)
+                time.sleep(2.0)
+
         time.sleep(random.uniform(0.45, 0.95))
 
     # Clean session completion: Background the app to prevent continuous streaming flag
@@ -291,14 +391,22 @@ def simulate_session(num_videos: int = 15, tier: int = 0):
 
     print("=" * 70)
     print("   PHASE-4 BIO-AUTOMATION SESSION COMPLETED SUCCESSFULLY")
-    print(f"   Session Summary: Dwell={SESSION_STATS['total_dwell_sec']/60:.1f}min | Likes={SESSION_STATS['likes']} | Follows={SESSION_STATS['follows']} | Comments={SESSION_STATS['comments']} | Profiles={SESSION_STATS['profile_checks']}")
+    summary = f"Dwell={SESSION_STATS['total_dwell_sec']/60:.1f}min | Likes={SESSION_STATS['likes']} | Follows={SESSION_STATS['follows']} | Comments={SESSION_STATS['comments']} | Profiles={SESSION_STATS['profile_checks']}"
+    print(f"   Session Summary: {summary}")
     print("=" * 70)
+    session_log.info(f"Session complete: {summary}")
 
 if __name__ == "__main__":
     count = 10
     tier = 0
-    if len(sys.argv) > 1 and sys.argv[1].isdigit():
-        count = int(sys.argv[1])
-    if len(sys.argv) > 2 and sys.argv[2].isdigit():
-        tier = int(sys.argv[2])
+    if len(sys.argv) > 1:
+        try:
+            count = int(sys.argv[1])
+        except ValueError:
+            pass
+    if len(sys.argv) > 2:
+        try:
+            tier = int(sys.argv[2])
+        except ValueError:
+            pass
     simulate_session(count, tier)

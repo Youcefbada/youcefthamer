@@ -11,42 +11,54 @@ import re
 import sys
 import os
 
-def find_adb() -> str:
-    candidates = [
-        r"C:\Users\Youcef\AppData\Local\Android\Sdk\platform-tools\adb.exe",
-        r"C:\Users\Youcef\Desktop\platform-tools\adb.exe",
-        "adb"
-    ]
-    for c in candidates:
-        if os.path.exists(c):
-            return c
-    return "adb"
-
-ADB_PATH = find_adb()
-
-def run_adb(cmd: str, is_su: bool = False) -> str:
-    if is_su:
-        escaped = cmd.replace("'", "'\\''")
-        full_cmd = [ADB_PATH, "shell", f"su -c '{escaped}'"]
-    else:
-        full_cmd = [ADB_PATH, "shell"] + cmd.split()
+try:
+    from adb_utils import ADB_PATH, run_adb
+except ImportError:
     try:
-        res = subprocess.run(full_cmd, capture_output=True, text=True, timeout=12)
-        return res.stdout.strip()
-    except Exception as e:
-        return f"ERROR: {e}"
+        from automation.adb_utils import ADB_PATH, run_adb
+    except ImportError:
+        def find_adb() -> str:
+            candidates = [
+                r"C:\Users\Youcef\AppData\Local\Android\Sdk\platform-tools\adb.exe",
+                r"C:\Users\Youcef\Desktop\platform-tools\adb.exe",
+                "adb"
+            ]
+            for c in candidates:
+                if os.path.exists(c):
+                    return c
+            return "adb"
+        ADB_PATH = find_adb()
+        def run_adb(cmd: str, is_su: bool = False, timeout: int = 12) -> str:
+            if is_su:
+                escaped = cmd.replace("'", "'\\''")
+                full_cmd = [ADB_PATH, "shell", f"su -c '{escaped}'"]
+            else:
+                full_cmd = [ADB_PATH, "shell"] + cmd.split()
+            try:
+                res = subprocess.run(full_cmd, capture_output=True, text=True, timeout=timeout)
+                return res.stdout.strip()
+            except Exception as e:
+                return f"ERROR: {e}"
+
+_IP_CACHE = None
 
 def check_ip_egress() -> dict:
-    raw = run_adb("/data/adb/magisk/busybox wget -qO- http://ip-api.com/json", is_su=True)
-    if not raw or not raw.startswith("{"):
-        raw = run_adb("curl -s http://ip-api.com/json")
+    global _IP_CACHE
+    if _IP_CACHE is not None:
+        return _IP_CACHE
+    raw = run_adb("/data/adb/magisk/busybox wget -qO- http://ip-api.com/json", is_su=True, timeout=8)
     try:
         data = json.loads(raw)
-        return {
+        _IP_CACHE = {
             "country": data.get("countryCode", ""),
             "ip": data.get("query", ""),
-            "city": data.get("city", "")
+            "city": data.get("city", ""),
+            "as": data.get("as", ""),
+            "isp": data.get("isp", ""),
+            "org": data.get("org", ""),
+            "raw": data
         }
+        return _IP_CACHE
     except Exception:
         return {}
 
@@ -56,29 +68,36 @@ def main():
     print("   Device: Samsung Galaxy A02 (SM-A022F) | OS: Android 11 API 30")
     print("=" * 70)
 
+    total_checks = 29
     checks = []
 
     def gate(point: int, name: str, passed: bool, detail: str):
         status = " [PASS] " if passed else "![FAIL]!"
         checks.append((point, name, passed, detail))
-        print(f"[{point:02d}/28]{status} {name}: {detail}")
+        print(f"[{point:02d}/{total_checks}]{status} {name}: {detail}")
 
-    # 1. Active VPN Provider Application
-    vpn_pids = run_adb("pgrep -f 'com.urbanvpn.android|com.v2ray.ang'", is_su=True)
-    active_vpns = [p.strip() for p in vpn_pids.splitlines() if p.strip().isdigit()]
-    gate(1, "VPN Application Active Status", len(active_vpns) > 0, f"Active VPN Process Count={len(active_vpns)}")
+    # 1-4: Proxy / VPN Architecture Health Check (TPROXY or Legacy VPN)
+    singbox_pid = run_adb("pidof sing-box", is_su=True).strip()
+    is_tproxy = bool(singbox_pid and singbox_pid.isdigit())
 
-    # 2. Always-on VPN / Lockdown State
-    vpn_app = run_adb("settings get secure always_on_vpn_app")
-    gate(2, "Always-on VPN Routing Target", True, f"app={vpn_app or 'Dynamic (Urban/V2Ray)'}")
-
-    # 3. VPN Service Health
-    tun_info = run_adb("ip -br link show tun0", is_su=True)
-    gate(3, "VPN Process Running", len(active_vpns) > 0, f"PIDs={active_vpns[:4]}")
-
-    # 4. tun0 Interface State
-    tun_active = "tun0" in tun_info and "UP" in tun_info
-    gate(4, "VPN tun0 Network Interface", tun_active, f"tun0 status: {tun_info if tun_info else 'DOWN'}")
+    if is_tproxy:
+        gate(1, "Zero-Interface TPROXY Engine", True, f"sing-box active (PID {singbox_pid})")
+        gate(2, "Network Tunnel Architecture", True, "Zero-Interface TPROXY (Kernel Netfilter Interception)")
+        tproxy_rules = run_adb("iptables -t mangle -L SINGBOX_TPROXY 2>/dev/null | grep -c TPROXY", is_su=True)
+        gate(3, "TPROXY Interception Rules", int(tproxy_rules or "0") > 0, f"{tproxy_rules} active mangle rules")
+        tun_count = run_adb(r"ip link show | grep -E '^\s*[0-9]+:\s*(tun[0-9]|ppp[0-9])' | wc -l", is_su=True)
+        tun_stealth = (tun_count.strip() == "0")
+        gate(4, "Zero TUN/PPP Stealth Verification", tun_stealth, "0 TUN/PPP interfaces (MetaSec Probes Blinded)" if tun_stealth else f"{tun_count} active TUN leaked!")
+    else:
+        vpn_pids = run_adb("pgrep -f 'com.urbanvpn.android|com.v2ray.ang'", is_su=True)
+        active_vpns = [p.strip() for p in vpn_pids.splitlines() if p.strip().isdigit()]
+        gate(1, "VPN Application Active Status", len(active_vpns) > 0, f"Active VPN Process Count={len(active_vpns)}")
+        vpn_app = run_adb("settings get secure always_on_vpn_app")
+        gate(2, "Always-on VPN Routing Target", True, f"app={vpn_app or 'Dynamic'}")
+        tun_info = run_adb("ip -br link show tun0", is_su=True)
+        gate(3, "VPN Process Running", len(active_vpns) > 0, f"PIDs={active_vpns[:4]}")
+        tun_active = "tun0" in tun_info and "UP" in tun_info
+        gate(4, "VPN tun0 Network Interface", tun_active, f"tun0 status: {tun_info if tun_info else 'DOWN'}")
 
     # 5. Remote Egress IP & Country Code
     ip_data = check_ip_egress()
@@ -184,14 +203,26 @@ def main():
     swappiness = run_adb("sysctl -n vm.swappiness", is_su=True)
     gate(28, "ZRAM Swappiness = 100", swappiness == "100", f"vm.swappiness={swappiness}")
 
+    # 29. IP Residential vs Datacenter Classification
+    ip_data = check_ip_egress()
+    as_info = ip_data.get("as", "")
+    isp_info = ip_data.get("isp", "")
+    datacenter_keywords = ["hosting", "cloud", "server", "datacenter", "digitalocean", "linode", "aws", "ovh", "hetzner", "choopa", "m247", "leaseweb"]
+    is_dc = any(kw in as_info.lower() or kw in isp_info.lower() for kw in datacenter_keywords)
+    if as_info:
+        gate(29, "IP Residential Classification", not is_dc,
+             f"Residential/ISP IP verified (AS: {as_info})" if not is_dc else f"DATACENTER/HOSTING DETECTED! (AS: {as_info})")
+    else:
+        gate(29, "IP Residential Classification", False, "Could not verify IP residential status")
+
     print("=" * 70)
     passed_count = sum(1 for _, _, p, _ in checks if p)
-    print(f"PRE-FLIGHT GATE RESULT: {passed_count}/28 CHECKS PASSED")
-    if passed_count >= 26:
+    print(f"PRE-FLIGHT GATE RESULT: {passed_count}/{total_checks} CHECKS PASSED")
+    if passed_count >= 27:
         print("[STATUS: ZERO LEAK PASS] Device is fully hardened and ready for TikTok session!")
         return 0
     else:
-        print(f"[STATUS: GATED] {28 - passed_count} checks failed.")
+        print(f"[STATUS: GATED] {total_checks - passed_count} checks failed.")
         return 1
 
 if __name__ == "__main__":
