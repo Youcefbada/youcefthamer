@@ -50,8 +50,8 @@ def check_tun0() -> bool:
     return "UP" in out
 
 def get_vpn_pids() -> list:
-    raw = run_adb("pgrep -f 'com.urbanvpn.android|libpie_openvpn|com.v2ray.ang'", is_su=True)
-    return [p.strip() for p in raw.splitlines() if p.strip().isdigit()]
+    raw = run_adb("pidof com.urbanvpn.android com.v2ray.ang libpie_openvpn", is_su=True)
+    return [p.strip() for p in raw.split() if p.strip().isdigit()]
 
 def cmd_status():
     print("=" * 65)
@@ -87,110 +87,42 @@ def cmd_status():
     print("=" * 65)
 
 def cmd_connect():
-    print("[*] Initiating automated Saudi VPN connection on device...")
-    # Check if already connected
+    print("[*] Checking Saudi VPN status on device...")
     if check_tun0():
         ip_data = get_ip_info()
         if ip_data.get("countryCode") == "SA":
-            print(f"[+] VPN is already active and routed to Saudi Arabia ({ip_data.get('query')})!")
-            return
-
-    # Trigger connection sequence
-    print("[*] Launching Urban VPN...")
-    run_adb("monkey -p com.urbanvpn.android -c android.intent.category.LAUNCHER 1")
-    time.sleep(2)
-    
-    print("[*] Dismissing prompts & triggering Connect button...")
-    run_adb("input tap 187 1427") # Skip if present
-    time.sleep(1)
-    run_adb("input tap 359 526")  # Connect button (Saudi Arabia)
-    
-    print("[*] Waiting for tun0 to initialize...")
-    for i in range(15):
-        time.sleep(1)
-        if check_tun0():
-            print(f"[+] tun0 connected after {i+1} seconds!")
-            break
+            print(f"[+] VPN is active and routed to Saudi Arabia ({ip_data.get('query')})!")
+            return True
+        else:
+            print(f"[!] VPN is active but routed to {ip_data.get('countryCode')} (not SA).")
+            return False
     else:
-        print("[!] Timeout waiting for tun0. Checking status...")
-
-    # Return to home
-    run_adb("input keyevent 3")
-    
-    # Pin OOM score
-    run_adb("for p in $(pgrep -f 'com.urbanvpn.android|libpie_openvpn'); do [ -d /proc/$p ] && echo -900 > /proc/$p/oom_score_adj; done", is_su=True)
-    
-    cmd_status()
+        print("[!] VPN tunnel (tun0) is DOWN.")
+        print("[i] Automatic Urban VPN launching has been removed. Please launch and connect your VPN manually on the device.")
+        return False
 
 def cmd_disconnect():
     print("[*] Disconnecting VPN...")
     run_adb("am force-stop com.urbanvpn.android", is_su=True)
-    time.sleep(2)
+    time.sleep(1)
     print(f"[*] TUN0 Status: {'UP' if check_tun0() else 'DOWN (Disconnected)'}")
 
-def cmd_install_daemon():
-    print("[*] Installing persistent VPN Autostart & Watchdog Daemon onto device...")
-    
-    script_local = os.path.join(os.path.dirname(__file__), "..", "research", "tools", "94-vpn-autostart-daemon.sh")
-    script_local = os.path.abspath(script_local)
-    
-    if not os.path.exists(script_local):
-        print(f"[!] Error: {script_local} does not exist!")
-        return
-
-    # Push to device
-    print(f"[*] Pushing {os.path.basename(script_local)} to /data/local/tmp/...")
-    subprocess.run([ADB_PATH, "push", script_local, "/data/local/tmp/94-vpn-autostart-daemon.sh"], check=True)
-    
-    # Push updated 98-vpn-oom-guard.sh
-    guard_local = os.path.join(os.path.dirname(__file__), "..", "research", "tools", "98-vpn-oom-guard.sh")
-    subprocess.run([ADB_PATH, "push", guard_local, "/data/local/tmp/98-vpn-oom-guard.sh"], check=True)
-
-    # Install into Magisk service.d
-    print("[*] Deploying to Magisk /data/adb/service.d/...")
-    deploy_cmd = (
-        "cp /data/local/tmp/94-vpn-autostart-daemon.sh /data/adb/service.d/94-vpn-autostart-daemon.sh && "
-        "chmod 755 /data/adb/service.d/94-vpn-autostart-daemon.sh && "
-        "cp /data/local/tmp/98-vpn-oom-guard.sh /data/adb/service.d/98-vpn-oom-guard.sh && "
-        "chmod 755 /data/adb/service.d/98-vpn-oom-guard.sh && "
-        "settings put secure always_on_vpn_app com.urbanvpn.android"
-    )
-    res = run_adb(deploy_cmd, is_su=True)
-    print(f"[+] Magisk service deployment result: {res or 'SUCCESS'}")
-
-    # Start the daemon in background
-    cmd_restart_daemon()
-    print("[+] Installation complete! VPN will now start automatically whenever the phone boots, opens, or wakes up.")
-
-def cmd_restart_daemon():
-    print("[*] Restarting VPN Autostart Watchdog Daemon on device...")
-    run_adb("pkill -f 94-vpn-autostart-daemon.sh", is_su=True)
-    time.sleep(1)
-    run_adb("nohup /data/adb/service.d/94-vpn-autostart-daemon.sh >/dev/null 2>&1 &", is_su=True)
-    time.sleep(2)
-    pids = run_adb("pgrep -f 94-vpn-autostart-daemon.sh", is_su=True)
-    if pids:
-        print(f"[+] Watchdog Daemon is running (PID: {pids.splitlines()[0]}).")
-    else:
-        print("[!] Failed to verify running daemon.")
-
-def cmd_logs():
-    print("[*] Retrieving daemon logs (/data/local/tmp/vpn_autostart.log)...")
-    logs = run_adb("tail -n 30 /data/local/tmp/vpn_autostart.log", is_su=True)
-    print("-" * 65)
-    print(logs or "No logs found yet.")
-    print("-" * 65)
+def cmd_uninstall_daemon():
+    print("[*] Removing any persistent VPN autostart daemon and restoring manual control...")
+    run_adb("pkill -9 -f 94-vpn-autostart-daemon.sh", is_su=True)
+    run_adb("rm -f /data/adb/service.d/94-vpn-autostart-daemon.sh", is_su=True)
+    run_adb("rm -f /data/local/tmp/94-vpn-autostart-daemon.sh /data/local/tmp/vpn_autostart.log /data/local/tmp/urban_ui*.xml", is_su=True)
+    run_adb("settings delete secure always_on_vpn_app", is_su=True)
+    run_adb("settings put secure always_on_vpn_lockdown 0", is_su=True)
+    print("[+] Autostart daemon completely removed. Device is restored to standard manual VPN control.")
 
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in ["-h", "--help"]:
         print("Usage: python automation/vpn_manager.py <command>")
         print("\nCommands:")
-        print("  status          Show current VPN tunnel, processes, and exit IP")
-        print("  connect         Automatically launch and connect Saudi VPN")
-        print("  disconnect      Disconnect VPN")
-        print("  install-daemon  Install persistent Magisk boot & wake watchdog daemon")
-        print("  restart-daemon  Restart watchdog daemon on phone")
-        print("  logs            Display latest watchdog log entries")
+        print("  status            Show current VPN tunnel, processes, and exit IP")
+        print("  disconnect        Disconnect VPN")
+        print("  uninstall-daemon  Completely remove background autostart & watchdog daemon from phone")
         return
 
     cmd = sys.argv[1].lower()
@@ -200,12 +132,12 @@ def main():
         cmd_connect()
     elif cmd == "disconnect":
         cmd_disconnect()
-    elif cmd == "install-daemon":
-        cmd_install_daemon()
-    elif cmd == "restart-daemon":
-        cmd_restart_daemon()
-    elif cmd == "logs":
-        cmd_logs()
+    elif cmd in ["uninstall-daemon", "remove-daemon"]:
+        cmd_uninstall_daemon()
+    elif cmd in ["install-daemon", "restart-daemon"]:
+        print("[!] Automated VPN autostart daemon has been decommissioned by user request.")
+        print("[i] To ensure all background services are removed from your device, run:")
+        print("    python automation/vpn_manager.py uninstall-daemon")
     else:
         print(f"Unknown command: {cmd}")
 

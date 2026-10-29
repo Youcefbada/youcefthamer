@@ -73,7 +73,7 @@ def preflight_gate() -> bool:
         print("[!] Preflight script not found, skipping gate.")
         return True
     result = subprocess.run([sys.executable, target], capture_output=True, text=True)
-    if "![FAIL]!" in result.stdout and "Saudi Arabia Exit IP" in result.stdout:
+    if "![FAIL]!" in result.stdout and "Exit IP Routing" in result.stdout and any(line for line in result.stdout.splitlines() if "![FAIL]!" in line and "Exit IP" in line):
         print("\n" + "=" * 70)
         print("  [CRITICAL ABORT] Exit IP is NOT Saudi Arabia!")
         print("  Running TikTok sessions in this state will cause instant shadowban.")
@@ -103,6 +103,10 @@ def cmd_warmup(args):
     if not preflight_gate():
         return
     count = str(args.count) if args.count else "10"
+    if getattr(args, "guest", False) or args.tier == -1:
+        print(f"[*] Launching Anonymous Guest Bio-Automation ({count} videos, Zero-Account, Pure Human Swiping)...")
+        run_script("guest_warmup.py", [count])
+        return
     tier = str(args.tier) if args.tier is not None else "0"
     print(f"[*] Launching Phase-4 Bio-Automation: {count} videos on TIER_{tier}...")
     run_script("ksa_human_agent.py", [count, tier])
@@ -164,6 +168,11 @@ def cmd_schedule(args):
 def cmd_integrity(args):
     run_script("play_integrity_guard.py")
 
+def cmd_session(args):
+    min_val = str(args.minutes or 40.0)
+    stop_before = str(args.stop_before or 2.0)
+    run_script("ksa_timed_session.py", [min_val, "--stop-before", stop_before])
+
 def main():
     print_banner()
 
@@ -195,7 +204,8 @@ def main():
     # warmup
     p_warmup = subparsers.add_parser("warmup", help="Run organic human bio-automation session on TikTok")
     p_warmup.add_argument("count", type=int, nargs="?", default=10, help="Number of videos to consume (default: 10)")
-    p_warmup.add_argument("tier", type=int, nargs="?", default=0, help="Trust tier (0: hours 0-24, 1: hours 24-48)")
+    p_warmup.add_argument("tier", type=int, nargs="?", default=0, help="Trust tier (0: hours 0-24, 1: hours 24-48, -1: guest)")
+    p_warmup.add_argument("--guest", action="store_true", help="Run anonymous guest warm-up without account creation or login")
     p_warmup.set_defaults(func=cmd_warmup)
 
     # device-warmup
@@ -243,6 +253,12 @@ def main():
     # integrity
     p_integrity = subparsers.add_parser("integrity", help="Audit Play Integrity & TEE Keystore attestation")
     p_integrity.set_defaults(func=cmd_integrity)
+
+    # session
+    p_session = subparsers.add_parser("session", help="Run automated timed KSA session (Wi-Fi ON -> VPN -> TikTok warm-up -> Stop 2m before -> WiFi OFF -> Sleep)")
+    p_session.add_argument("minutes", type=float, nargs="?", default=40.0, help="Total session minutes (default: 40)")
+    p_session.add_argument("--stop-before", type=float, default=2.0, help="Minutes before stop to close TikTok/VPN/WiFi (default: 2)")
+    p_session.set_defaults(func=cmd_session)
 
     if len(sys.argv) == 1:
         parser.print_help()
